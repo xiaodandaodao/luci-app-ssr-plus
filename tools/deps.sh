@@ -103,20 +103,89 @@ apk_arch() {
   esac
 }
 
-# 从 alpine APKINDEX 里解析 apk-tools 最新版本（PKG_ARCH 已固定到具体架构）
-latest_apktools_ver() {
-  local arch="$1"
-  local idx="https://dl-cdn.alpinelinux.org/alpine/latest/main/$arch/APKINDEX.tar.gz"
-  local ver
-  ver="$(curl -fsSL --max-time 60 "$idx" | tar -xzO APKINDEX 2>/dev/null |
-         awk -v a="$arch" '
-           /^P:apk-tools$/ {name=1; next}
-           /^P:/           {name=0}
-           name && /^V:/   {v=$2}
-           /^A:/ && v != "" {if ($2 == a) {print v; exit}}
-         ')"
-  [ -n "$ver" ] || return 0
-  echo "$ver"
+# apk-tools 版本固定 —— 必须与本地产出 196-r17 时用的 3.0.0 一致，
+# 否则 mkpkg 生成的包格式（APK v3）会变。
+APK_TOOLS_VER="3.0.0"
+
+# 首选：从源码编译 apk-tools（Linux 上不需要任何补丁）
+build_apk_from_source() {
+  if [ "$(uname -s)" != "Linux" ]; then
+    warn "非 Linux 平台不自动编译 apk-tools（macOS 需额外 3 个平台补丁）"
+    return 1
+  fi
+  local missing=""
+  command -v meson >/dev/null 2>&1 || missing="$missing meson"
+  command -v ninja >/dev/null 2>&1 || missing="$missing ninja"
+  [ -n "$missing" ] && { warn "缺少构建工具:$missing（apt install meson ninja-build libssl-dev zlib1g-dev）"; return 1; }
+
+  local tmp url
+  tmp="$(mktemp -d)"
+  url="https://gitlab.alpinelinux.org/alpine/apk-tools/-/archive/v${APK_TOOLS_VER}/apk-tools-v${APK_TOOLS_VER}.tar.gz"
+  info "下载 apk-tools ${APK_TOOLS_VER} 源码"
+  curl -fsSL --max-time 180 "$url" -o "$tmp/apk-tools.tar.gz" \
+    || { warn "下载失败：${url}"; rm -rf "$tmp"; return 1; }
+  tar -xzf "$tmp/apk-tools.tar.gz" -C "$tmp" || { warn "解包失败"; rm -rf "$tmp"; return 1; }
+
+  local src="$tmp/apk-tools-v${APK_TOOLS_VER}"
+  info "编译 apk-tools（meson + ninja，约 30 秒）..."
+  if ! ( cd "$src" && meson setup build --prefix=/usr >/dev/null && ninja -C build >/dev/null ) 2>"$tmp/build.log"; then
+    warn "apk-tools 编译失败，日志尾部："; tail -5 "$tmp/build.log" >&2
+    rm -rf "$tmp"; return 1
+  fi
+
+  local bin="$src/build/src/apk"
+  [ -x "$bin" ] || { warn "没找到编译产物 $bin"; rm -rf "$tmp"; return 1; }
+  cp "$bin" "$TOOLS/apk" && chmod +x "$TOOLS/apk"
+  rm -rf "$tmp"
+  info "apk-tools ${APK_TOOLS_VER} -> $TOOLS/apk（自编译，APK v3）"
+  return 0
+}
+
+# 解析某个 alpine 版本目录里的 apk-tools 版本号（注意：latest 目录已不稳定，
+# 必须用 vX.Y 具体版本目录）
+apk_index_ver() {  # $1=branch $2=arch [$3=包名，默认 apk-tools]
+  python3 - "$1" "$2" "${3:-apk-tools}" <<'PY'
+import io, sys, tarfile, urllib.request
+branch, arch, want = sys.argv[1], sys.argv[2], sys.argv[3]
+url = "https://dl-cdn.alpinelinux.org/alpine/%s/main/%s/APKINDEX.tar.gz" % (branch, arch)
+try:
+    raw = urllib.request.urlopen(url, timeout=45).read()
+    txt = tarfile.open(fileobj=io.BytesIO(raw)).extractfile("APKINDEX").read().decode("utf-8", "replace")
+except Exception:
+    sys.exit(0)
+name = None
+for line in txt.splitlines():
+    if line.startswith("P:"):
+        name = line[2:]
+    elif line.startswith("V:") and name == want:
+        print(line[2:]); break
+PY
+}
+
+# 兜底：alpine 的 apk-static（apk-tools 2.x → 产出 APK v2 格式，仅在没有编译条件时用）
+fetch_apk_static() {
+  [ "$(uname -s)" = "Linux" ] || { warn "apk-static 是 Linux 静态二进制，本平台跳过"; return 1; }
+  local arch; arch="$(apk_arch)"
+  [ -n "$arch" ] || { warn "不支持的 CPU 架构 $(uname -m)"; return 1; }
+  local branch="" ver="" tmp
+  for branch in v3.22 v3.21 v3.20 v3.19; do
+    ver="$(apk_index_ver "$branch" "$arch" apk-tools-static)"
+    [ -n "$ver" ] && break
+  done
+  [ -n "$ver" ] || { warn "alpine 仓库里没解析到 apk-tools-static 版本"; return 1; }
+
+  tmp="$(mktemp -d)"
+  local url="https://dl-cdn.alpinelinux.org/alpine/${branch}/main/${arch}/apk-tools-static-${ver}.apk"
+  info "尝试下载 apk-tools-static ${ver}（${branch}/${arch}）"
+  curl -fsSL --max-time 180 "$url" -o "$tmp/apkt.apk" \
+    || { warn "下载失败：${url}"; rm -rf "$tmp"; return 1; }
+  ( cd "$tmp" && tar -xzf apkt.apk ./sbin/apk.static ) 2>/dev/null \
+    || { warn "apk-tools-static 包内未找到 sbin/apk.static"; rm -rf "$tmp"; return 1; }
+  mv "$tmp/sbin/apk.static" "$TOOLS/apk" && chmod +x "$TOOLS/apk"
+  rm -rf "$tmp"
+  warn "用的是 Alpine apk-tools ${ver}（2.x，产出 APK v2 格式），与本地 3.0.0 产物不一定字节一致"
+  info "apk-static -> $TOOLS/apk"
+  return 0
 }
 
 prepare_apk() {
@@ -124,30 +193,10 @@ prepare_apk() {
     info "apk 已存在，跳过"
     return 0
   fi
-  local arch; arch="$(apk_arch)"
-  [ -n "$arch" ] || { warn "不支持的 CPU 架构 $(uname -m)，跳过 apk"; return 0; }
-  command -v tar >/dev/null 2>&1 || die "需要 tar 解开 apk-tools 包"
-
-  local ver idx tmp
-  ver="$(latest_apktools_ver "$arch")"
-  [ -n "$ver" ] || ver="2.14.4-r1"
-  local base="https://dl-cdn.alpinelinux.org/alpine/latest/main/$arch"
-  local url="$base/apk-tools-$ver.apk"
-
-  info "尝试下载 apk-tools ${ver}（${arch}）"
-  tmp="$(mktemp -d)"
-  curl -fsSL --max-time 120 "$url" -o "$tmp/apkt.apk" \
-    || { warn "下载失败：${url}（alpine CDN 版本可能已漂移）"
-         warn "可手工放置静态 apk-static 到 $TOOLS/apk，或用 ipk 格式"; rm -rf "$tmp"; return 0; }
-
-  ( cd "$tmp" && tar -xzf apkt.apk ./sbin/apk-static 2>/dev/null ) \
-    || { warn "apk-tools 包内未找到 sbin/apk-static"; rm -rf "$tmp"; return 0; }
-  [ -f "$tmp/sbin/apk-static" ] || { warn "解包后缺少 sbin/apk-static"; rm -rf "$tmp"; return 0; }
-
-  mv "$tmp/sbin/apk-static" "$TOOLS/apk"
-  chmod +x "$TOOLS/apk"
-  rm -rf "$tmp"
-  info "apk-static -> $TOOLS/apk"
+  build_apk_from_source && return 0
+  fetch_apk_static && return 0
+  warn "拿不到 apk 工具，本次只会产出 .ipk（要 apk 请装 meson/ninja 或手工放 $TOOLS/apk）"
+  return 0
 }
 
 prepare_po2lmo
