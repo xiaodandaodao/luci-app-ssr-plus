@@ -276,7 +276,9 @@ def set_tree_meta(dest, modes, mtime):
                 continue
             os.chmod(p, modes.get(rel, 0o644))
             os.utime(p, (mtime, mtime))
-    subprocess.run(["xattr", "-cr", dest], capture_output=True)  # macOS 扩展属性
+    # 清掉 macOS 扩展属性（仅 macOS 有 xattr，Linux 上跳过；否则会 FileNotFoundError）
+    if sys.platform == "darwin" and shutil.which("xattr"):
+        subprocess.run(["xattr", "-cr", dest], capture_output=True)
 
 
 def tree_stats(dest):

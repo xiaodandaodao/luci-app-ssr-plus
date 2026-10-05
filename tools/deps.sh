@@ -113,7 +113,7 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# 2) apk-static（静态链接，musl 目标，glibc 机器可直接跑）
+# 2) apk（必须 3.x —— 只有 3.x 的 mkpkg 产出 APK v3 格式）
 # ---------------------------------------------------------------------------
 apk_arch() {
   case "$(uname -m)" in
@@ -124,7 +124,7 @@ apk_arch() {
 }
 
 # apk-tools 版本固定 —— 必须与本地产出 196-r17 时用的 3.0.0 一致，
-# 否则 mkpkg 生成的包格式（APK v3）会变。
+# 否则 mkpkg 生成的包格式（APK v3）可能变。
 APK_TOOLS_VER="3.0.0"
 
 # 首选：从源码编译 apk-tools（Linux 上不需要任何补丁）
@@ -134,20 +134,26 @@ build_apk_from_source() {
     return 1
   fi
   local missing=""
-  command -v meson >/dev/null 2>&1 || missing="$missing meson"
-  command -v ninja >/dev/null 2>&1 || missing="$missing ninja"
-  [ -n "$missing" ] && { warn "缺少构建工具:$missing（apt install meson ninja-build libssl-dev zlib1g-dev）"; return 1; }
+  command -v meson >/dev/null 2>&1 || missing="${missing} meson"
+  command -v ninja >/dev/null 2>&1 || missing="${missing} ninja"
+  [ -n "$missing" ] && { warn "缺少构建工具:${missing}（apt install meson ninja-build pkg-config zlib1g-dev libssl-dev）"; return 1; }
 
-  local tmp url
-  tmp="$(mktemp -d)"
-  url="https://gitlab.alpinelinux.org/alpine/apk-tools/-/archive/v${APK_TOOLS_VER}/apk-tools-v${APK_TOOLS_VER}.tar.gz"
-  info "下载 apk-tools ${APK_TOOLS_VER} 源码"
-  curl -fsSL --max-time 180 "$url" -o "$tmp/apk-tools.tar.gz" \
-    || { warn "下载失败：${url}"; rm -rf "$tmp"; return 1; }
+  local tmp; tmp="$(mktemp -d)"
+  # GitHub 镜像优先：GitHub Actions runner 访问 gitlab.alpinelinux.org 会被挡（HTTP 418）
+  local u got=0
+  for u in "https://github.com/alpinelinux/apk-tools/archive/refs/tags/v${APK_TOOLS_VER}.tar.gz" \
+           "https://gitlab.alpinelinux.org/alpine/apk-tools/-/archive/v${APK_TOOLS_VER}/apk-tools-v${APK_TOOLS_VER}.tar.gz"; do
+    info "下载 apk-tools ${APK_TOOLS_VER} 源码（$(echo "$u" | cut -d/ -f3)）"
+    if curl -fsSL -A "curl" --max-time 180 "$u" -o "$tmp/apk-tools.tar.gz"; then got=1; break; fi
+    warn "下载失败：${u}"
+  done
+  [ "$got" = 1 ] || { rm -rf "$tmp"; return 1; }
   tar -xzf "$tmp/apk-tools.tar.gz" -C "$tmp" || { warn "解包失败"; rm -rf "$tmp"; return 1; }
 
-  local src="$tmp/apk-tools-v${APK_TOOLS_VER}"
-  [ -d "$src" ] || { warn "解包后没找到 $src"; rm -rf "$tmp"; return 1; }
+  # GitHub 归档解出 apk-tools-3.0.0，GitLab 的是 apk-tools-v3.0.0 —— 用 glob 同时兜住
+  local src; src="$(cd "$tmp" && ls -d apk-tools-*/ 2>/dev/null | head -1)"
+  [ -n "$src" ] || { warn "解包后没找到 apk-tools-* 目录"; rm -rf "$tmp"; return 1; }
+  src="$tmp/${src%/}"
   # tarball 偶尔会丢可执行位，而 meson 要 run_command('./get-version.sh')
   chmod +x "$src/get-version.sh" 2>/dev/null
   info "编译 apk-tools（meson + ninja，约 30 秒）..."
@@ -160,12 +166,11 @@ build_apk_from_source() {
   [ -x "$bin" ] || { warn "没找到编译产物 $bin"; rm -rf "$tmp"; return 1; }
   cp "$bin" "$TOOLS/apk" && chmod +x "$TOOLS/apk"
   rm -rf "$tmp"
-  info "apk-tools ${APK_TOOLS_VER} -> $TOOLS/apk（自编译，APK v3）"
+  info "apk-tools ${APK_TOOLS_VER} -> $TOOLS/apk（自编译）"
   return 0
 }
 
-# 解析某个 alpine 版本目录里的 apk-tools 版本号（注意：latest 目录已不稳定，
-# 必须用 vX.Y 具体版本目录）
+# 解析某个 alpine 版本目录里的包版本号（latest 目录已 404，必须用 vX.Y / edge）
 apk_index_ver() {  # $1=branch $2=arch [$3=包名，默认 apk-tools]
   python3 - "$1" "$2" "${3:-apk-tools}" <<'PY'
 import io, sys, tarfile, urllib.request
@@ -185,28 +190,46 @@ for line in txt.splitlines():
 PY
 }
 
-# 兜底：alpine 的 apk-static（apk-tools 2.x → 产出 APK v2 格式，仅在没有编译条件时用）
+# 兜底：下载 alpine 的 apk-tools-static 静态二进制（静态链接，glibc 机器可直接跑）。
+# 只接受 3.x —— 2.x 的 mkpkg 产出 APK v2，格式与我们要的不一样，宁可不要。
 fetch_apk_static() {
   [ "$(uname -s)" = "Linux" ] || { warn "apk-static 是 Linux 静态二进制，本平台跳过"; return 1; }
   local arch; arch="$(apk_arch)"
   [ -n "$arch" ] || { warn "不支持的 CPU 架构 $(uname -m)"; return 1; }
   local branch="" ver="" tmp
-  for branch in v3.22 v3.21 v3.20 v3.19; do
+  # 只有 edge / v3.23 起才有 apk-tools 3.x；v3.22 及以下仍是 2.14.x
+  for branch in edge v3.23 v3.24; do
     ver="$(apk_index_ver "$branch" "$arch" apk-tools-static)"
+    case "$ver" in 3.*) ;; *) ver="" ;; esac
     [ -n "$ver" ] && break
   done
-  [ -n "$ver" ] || { warn "alpine 仓库里没解析到 apk-tools-static 版本"; return 1; }
+  [ -n "$ver" ] || { warn "alpine 仓库里没找到 3.x 的 apk-tools-static"; return 1; }
 
   tmp="$(mktemp -d)"
   local url="https://dl-cdn.alpinelinux.org/alpine/${branch}/main/${arch}/apk-tools-static-${ver}.apk"
-  info "尝试下载 apk-tools-static ${ver}（${branch}/${arch}）"
+  info "下载 apk-tools-static ${ver}（${branch}/${arch}）"
   curl -fsSL --max-time 180 "$url" -o "$tmp/apkt.apk" \
     || { warn "下载失败：${url}"; rm -rf "$tmp"; return 1; }
-  ( cd "$tmp" && tar -xzf apkt.apk ./sbin/apk.static ) 2>/dev/null \
-    || { warn "apk-tools-static 包内未找到 sbin/apk.static"; rm -rf "$tmp"; return 1; }
-  mv "$tmp/sbin/apk.static" "$TOOLS/apk" && chmod +x "$TOOLS/apk"
+
+  # .apk 是多段 gzip 拼接（签名段 + .PKGINFO 段 + 数据段）。GNU tar 读完第一段就
+  # 认为归档结束、报"找不到成员"（macOS 的 bsdtar 会继续读，所以本机测不出来），
+  # 这里改用 python tarfile 的 ignore_zeros 精确提取。
+  if ! python3 - "$tmp/apkt.apk" "$TOOLS/apk" <<'PY'
+import sys, tarfile
+src, dst = sys.argv[1], sys.argv[2]
+with tarfile.open(src, "r:gz", ignore_zeros=True) as tf:
+    for m in tf.getmembers():
+        if m.isfile() and m.name.lstrip("./").endswith("apk.static"):
+            open(dst, "wb").write(tf.extractfile(m).read())
+            sys.exit(0)
+sys.exit(1)
+PY
+  then
+    warn "apk-tools-static 里没提取到 sbin/apk.static"; rm -rf "$tmp"; return 1
+  fi
+  chmod +x "$TOOLS/apk"
   rm -rf "$tmp"
-  warn "用的是 Alpine apk-tools ${ver}（2.x，产出 APK v2 格式），与本地 3.0.0 产物不一定字节一致"
+  warn "用的是 Alpine apk-tools-static ${ver}（3.x，同样产出 APK v3）"
   info "apk-static -> $TOOLS/apk"
   return 0
 }

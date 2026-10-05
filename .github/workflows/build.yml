@@ -62,6 +62,15 @@ jobs:
           [ -n "${{ github.event.inputs.enable }}" ] && args+=(--enable "${{ github.event.inputs.enable }}")
           python3 tools/build.py "${args[@]}"
 
+      - name: 检查产物完整性
+        run: |
+          # 3.x 的 apk 工具拿不到时会静默只出 ipk —— 这里直接让流程失败，避免悄悄少交包
+          n_ipk=$(ls dist/*.ipk 2>/dev/null | wc -l)
+          n_apk=$(ls dist/*.apk 2>/dev/null | wc -l)
+          echo "ipk: $n_ipk  apk: $n_apk"
+          [ "$n_ipk" -ge 2 ] || { echo "::error::缺少 ipk 产物"; exit 1; }
+          [ "$n_apk" -ge 2 ] || { echo "::error::缺少 apk 产物（apk-tools 3.x 没准备好？）"; exit 1; }
+
       - name: 生成交付清单
         run: |
           {
@@ -115,7 +124,7 @@ jobs:
             echo "### 产物"
             echo "| 文件 | sha256 |"
             echo "| --- | --- |"
-            grep 'sha256=' dist/BUILD-INFO.txt | sed 's#dist/\(.*\)  sha256=\(.*\)#| `\1` | `\2` |#'
+            grep 'sha256=' dist/BUILD-INFO.txt | sed -E 's#^([^ ]+) +sha256=([0-9a-f]+)#| `\1` | `\2` |#'
             echo
             echo "构建号：${{ github.run_id }}（${{ github.sha }}）"
             echo
