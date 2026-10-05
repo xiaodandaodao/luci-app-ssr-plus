@@ -1,0 +1,44 @@
+<%+header%>
+
+<div class="ssr-clash-ui scui-page">
+	<div class="scui-page-head">
+		<h2><%:Clash Panel%> · <%=alias%></h2>
+		<span id="clash-panel-status" class="scui-status"></span>
+	</div>
+	<div class="cbi-map-descr" style="margin:0 0 12px">
+		<%:This panel is available only when the current Clash total node is active.%>
+	</div>
+	<div id="clash-panel-groups"></div>
+</div>
+
+<%+shadowsocksr/clash_groups_ui%>
+
+<script type="text/javascript">
+//<![CDATA[
+(function() {
+	var mount = document.getElementById('clash-panel-groups');
+	if (!mount || !window.ssrClashUI) {
+		return;
+	}
+
+	var ui = window.ssrClashUI.create({
+		mount: mount,
+		statusEl: document.getElementById('clash-panel-status'),
+		sid: <%=string.format("%q", sid)%>,
+		xhr: window.XHR || window.ssrXHR,
+		urls: {
+			groups: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_groups")%>',
+			switch: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_switch")%>',
+			delayTest: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_delay_test")%>',
+			customGroups: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_custom_groups")%>',
+			customGroupSave: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_custom_group_save")%>',
+			customGroupDelete: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_custom_group_delete")%>'
+		}
+	});
+
+	ui.load();
+})();
+//]]>
+</script>
+
+<%+footer%>

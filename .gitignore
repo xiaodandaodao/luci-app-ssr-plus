@@ -1,0 +1,20 @@
+# 构建产物（注意：payload/ 下的 .lmo 是要分发的载荷，必须保留，故不写 *.lmo）
+out/
+dist/
+*.ipk
+*.apk
+
+# 平台相关的打包工具（由 tools/deps.sh 现场生成，不入库）
+tools/po2lmo
+tools/apk
+tools/libapk*.dylib
+
+# 依赖与缓存
+tools/node_modules/
+node_modules/
+__pycache__/
+*.pyc
+
+# 编辑器 / 系统
+.DS_Store
+*.swp

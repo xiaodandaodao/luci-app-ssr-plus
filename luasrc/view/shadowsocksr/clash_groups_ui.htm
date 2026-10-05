@@ -1,0 +1,1850 @@
+<%
+-- ============================================================================
+-- 共享组件：Mihomo / Clash 策略组面板（现代卡片式 UI）
+-- 被 clash_main_panel.htm（服务器页弹窗）与 clash_panel.htm（独立页）共同引用。
+-- 只输出 <style> + <script>，不产生任何可见 DOM。
+-- 调用方式：
+--   var ui = window.ssrClashUI.create({
+--       mount:     容器元素,
+--       statusEl:  状态文字元素（可选）,
+--       sid:       订阅节点 id,
+--       xhr:       JSON XHR 封装（window.ssrXHR / XHR）,
+--       urls:      { groups, switch, delayTest }
+--   });
+--   ui.setSid(sid); ui.load();
+-- ============================================================================
+-%>
+<style type="text/css">
+	/* ---------------------------------------------------------------- 设计变量 */
+	.ssr-clash-ui,
+	.scui-gm-scope {
+		--scui-accent: #3d63f5;
+		--scui-accent-soft: rgba(61, 99, 245, 0.09);
+		--scui-accent-ring: rgba(61, 99, 245, 0.22);
+		--scui-bg: #f6f7fa;
+		--scui-surface: #ffffff;
+		--scui-surface-2: #f2f4f8;
+		--scui-fg: #1c2130;
+		--scui-muted: #6b7385;
+		--scui-faint: #98a0b3;
+		--scui-line: #e6e8ef;
+		--scui-line-strong: #d5d9e4;
+		--scui-shadow-sm: 0 1px 2px rgba(20, 26, 48, 0.06);
+		--scui-shadow: 0 12px 32px -20px rgba(20, 26, 48, 0.42), 0 1px 2px rgba(20, 26, 48, 0.05);
+		--scui-fast-bg: #e8f8f1; --scui-fast-bd: #b6e6d2; --scui-fast-fg: #0a7a58; --scui-fast-dot: #10b981;
+		--scui-ok-bg: #fdf6e3;   --scui-ok-bd: #f0dda3;   --scui-ok-fg: #8a6100; --scui-ok-dot: #eab308;
+		--scui-slow-bg: #fdf0e5; --scui-slow-bd: #f5d1a8; --scui-slow-fg: #9a4a00; --scui-slow-dot: #f97316;
+		--scui-bad-bg: #fdecec;  --scui-bad-bd: #f7c6c6;  --scui-bad-fg: #a81c1c; --scui-bad-dot: #ef4444;
+		--scui-none-bg: #f2f3f7; --scui-none-bd: #e3e6ee; --scui-none-fg: #6b7385; --scui-none-dot: #a3abbb;
+		--scui-radius: 12px;
+
+		color: var(--scui-fg);
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+		font-size: 13px;
+		line-height: 1.5;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	html[data-darkmode="true"] .ssr-clash-ui {
+		--scui-accent: #7d97ff;
+		--scui-accent-soft: rgba(125, 151, 255, 0.14);
+		--scui-accent-ring: rgba(125, 151, 255, 0.32);
+		--scui-bg: #0f1116;
+		--scui-surface: #171a21;
+		--scui-surface-2: #1e222b;
+		--scui-fg: #eceff5;
+		--scui-muted: #99a2b4;
+		--scui-faint: #6d7686;
+		--scui-line: #262b36;
+		--scui-line-strong: #353c4a;
+		--scui-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+		--scui-shadow: 0 16px 36px -22px rgba(0, 0, 0, 0.9), 0 1px 2px rgba(0, 0, 0, 0.45);
+		--scui-fast-bg: rgba(16, 185, 129, 0.14); --scui-fast-bd: rgba(16, 185, 129, 0.32); --scui-fast-fg: #5fe3b4;
+		--scui-ok-bg: rgba(234, 179, 8, 0.14);    --scui-ok-bd: rgba(234, 179, 8, 0.32);    --scui-ok-fg: #f0cf6a;
+		--scui-slow-bg: rgba(249, 115, 22, 0.14); --scui-slow-bd: rgba(249, 115, 22, 0.32); --scui-slow-fg: #ffab6b;
+		--scui-bad-bg: rgba(239, 68, 68, 0.14);   --scui-bad-bd: rgba(239, 68, 68, 0.32);   --scui-bad-fg: #ff9b9b;
+		--scui-none-bg: rgba(148, 163, 184, 0.10); --scui-none-bd: rgba(148, 163, 184, 0.24); --scui-none-fg: #98a3b6;
+	}
+
+	/* ---------------------------------------------------------------- 基础件 */
+	.ssr-clash-ui .scui-icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+	.ssr-clash-ui .scui-icon svg { width: 1em; height: 1em; display: block; }
+
+	.ssr-clash-ui .scui-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		height: 30px;
+		padding: 0 12px;
+		border-radius: 9px;
+		border: 1px solid var(--scui-line-strong);
+		background: var(--scui-surface);
+		color: var(--scui-fg);
+		font: inherit;
+		font-size: 12.5px;
+		font-weight: 500;
+		cursor: pointer;
+		white-space: nowrap;
+		box-shadow: var(--scui-shadow-sm);
+		transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.08s ease, color 0.15s ease;
+		-webkit-appearance: none;
+		appearance: none;
+		box-sizing: border-box;
+	}
+	.ssr-clash-ui .scui-btn:hover { background: var(--scui-surface-2); border-color: var(--scui-faint); }
+	.ssr-clash-ui .scui-btn:active { transform: translateY(1px); }
+	.ssr-clash-ui .scui-btn:disabled { opacity: 0.55; cursor: default; transform: none; }
+	.ssr-clash-ui .scui-btn .scui-icon { font-size: 13px; }
+
+	.ssr-clash-ui .scui-btn-primary {
+		background: var(--scui-accent);
+		border-color: var(--scui-accent);
+		color: #fff;
+	}
+	.ssr-clash-ui .scui-btn-primary:hover {
+		background: var(--scui-accent);
+		border-color: var(--scui-accent);
+		filter: brightness(1.07);
+	}
+
+	.ssr-clash-ui .scui-btn-ghost {
+		background: transparent;
+		border-color: transparent;
+		box-shadow: none;
+		color: var(--scui-muted);
+		padding: 0 8px;
+	}
+	.ssr-clash-ui .scui-btn-ghost:hover { background: var(--scui-accent-soft); border-color: transparent; color: var(--scui-accent); }
+
+	/* 延迟胶囊 */
+	.ssr-clash-ui .scui-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 1px 8px 1px 7px;
+		border-radius: 999px;
+		border: 1px solid var(--scui-none-bd);
+		background: var(--scui-none-bg);
+		color: var(--scui-none-fg);
+		font-size: 11.5px;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+		flex: 0 0 auto;
+	}
+	.ssr-clash-ui .scui-pill::before {
+		content: "";
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--scui-none-dot);
+		flex: 0 0 auto;
+	}
+	.ssr-clash-ui .scui-pill.d-fast { background: var(--scui-fast-bg); border-color: var(--scui-fast-bd); color: var(--scui-fast-fg); }
+	.ssr-clash-ui .scui-pill.d-fast::before { background: var(--scui-fast-dot); }
+	.ssr-clash-ui .scui-pill.d-ok { background: var(--scui-ok-bg); border-color: var(--scui-ok-bd); color: var(--scui-ok-fg); }
+	.ssr-clash-ui .scui-pill.d-ok::before { background: var(--scui-ok-dot); }
+	.ssr-clash-ui .scui-pill.d-slow { background: var(--scui-slow-bg); border-color: var(--scui-slow-bd); color: var(--scui-slow-fg); }
+	.ssr-clash-ui .scui-pill.d-slow::before { background: var(--scui-slow-dot); }
+	.ssr-clash-ui .scui-pill.d-bad { background: var(--scui-bad-bg); border-color: var(--scui-bad-bd); color: var(--scui-bad-fg); }
+	.ssr-clash-ui .scui-pill.d-bad::before { background: var(--scui-bad-dot); }
+	.ssr-clash-ui .scui-pill.d-none::before { background: var(--scui-none-dot); opacity: 0.6; }
+
+	/* 状态条 */
+	.ssr-clash-ui .scui-status {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 2px 10px;
+		border-radius: 999px;
+		background: var(--scui-surface-2);
+		border: 1px solid var(--scui-line);
+		color: var(--scui-muted);
+		font-size: 12px;
+		white-space: nowrap;
+		max-width: 46vw;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.ssr-clash-ui .scui-status::before {
+		content: "";
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--scui-faint);
+		flex: 0 0 auto;
+	}
+	.ssr-clash-ui .scui-status:empty { display: none; }
+	.ssr-clash-ui .scui-status.t-ok { color: var(--scui-fast-fg); background: var(--scui-fast-bg); border-color: var(--scui-fast-bd); }
+	.ssr-clash-ui .scui-status.t-ok::before { background: var(--scui-fast-dot); }
+	.ssr-clash-ui .scui-status.t-busy { color: var(--scui-accent); background: var(--scui-accent-soft); border-color: var(--scui-accent-ring); }
+	.ssr-clash-ui .scui-status.t-busy::before { background: var(--scui-accent); animation: scui-pulse 1s ease-in-out infinite; }
+	.ssr-clash-ui .scui-status.t-warn { color: var(--scui-ok-fg); background: var(--scui-ok-bg); border-color: var(--scui-ok-bd); }
+	.ssr-clash-ui .scui-status.t-warn::before { background: var(--scui-ok-dot); }
+	.ssr-clash-ui .scui-status.t-err { color: var(--scui-bad-fg); background: var(--scui-bad-bg); border-color: var(--scui-bad-bd); }
+	.ssr-clash-ui .scui-status.t-err::before { background: var(--scui-bad-dot); }
+
+	@keyframes scui-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+	@keyframes scui-spin { to { transform: rotate(360deg); } }
+
+	/* ---------------------------------------------------------------- 工具栏 */
+	.ssr-clash-ui .scui-toolbar {
+		position: relative;
+		z-index: 5;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 10px;
+		padding: 10px 12px;
+		margin: 0 0 12px;
+		background: var(--scui-surface);
+		border: 1px solid var(--scui-line);
+		border-radius: var(--scui-radius);
+		box-shadow: var(--scui-shadow-sm);
+	}
+	.ssr-clash-ui .scui-toolbar-l { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+	.ssr-clash-ui .scui-toolbar-r { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-left: auto; }
+
+	.ssr-clash-ui .scui-search {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+	}
+	.ssr-clash-ui .scui-search .scui-icon {
+		position: absolute;
+		left: 9px;
+		font-size: 13px;
+		color: var(--scui-faint);
+		pointer-events: none;
+	}
+	.ssr-clash-ui .scui-search input {
+		height: 30px;
+		width: 190px;
+		padding: 0 10px 0 28px;
+		border-radius: 9px;
+		border: 1px solid var(--scui-line-strong);
+		background: var(--scui-surface-2) !important;
+		color: var(--scui-fg) !important;
+		font: inherit;
+		font-size: 12.5px;
+		box-shadow: none !important;
+		box-sizing: border-box;
+		outline: none;
+		transition: border-color 0.15s ease, box-shadow 0.15s ease;
+	}
+	.ssr-clash-ui .scui-search input::placeholder { color: var(--scui-faint); }
+	.ssr-clash-ui .scui-search input:focus {
+		border-color: var(--scui-accent) !important;
+		box-shadow: 0 0 0 3px var(--scui-accent-ring) !important;
+	}
+
+	.ssr-clash-ui .scui-meta {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		font-size: 12px;
+		color: var(--scui-muted);
+		flex-wrap: wrap;
+	}
+	.ssr-clash-ui .scui-meta b { color: var(--scui-fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+	.ssr-clash-ui .scui-meta-sep { width: 3px; height: 3px; border-radius: 50%; background: var(--scui-faint); opacity: 0.7; }
+	.ssr-clash-ui .scui-meta-url {
+		max-width: 230px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--scui-faint);
+	}
+
+	/* ---------------------------------------------------------------- 策略组卡片 */
+	.ssr-clash-ui .scui-card {
+		background: var(--scui-surface);
+		border: 1px solid var(--scui-line);
+		border-radius: var(--scui-radius);
+		box-shadow: var(--scui-shadow-sm);
+		margin: 0 0 10px;
+		overflow: hidden;
+		transition: border-color 0.16s ease, box-shadow 0.16s ease;
+	}
+	.ssr-clash-ui .scui-card:hover { border-color: var(--scui-line-strong); box-shadow: var(--scui-shadow); }
+	.ssr-clash-ui .scui-card.is-current-card { border-color: var(--scui-accent-ring); }
+
+	.ssr-clash-ui .scui-card-head {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 9px 12px;
+		min-height: 44px;
+		box-sizing: border-box;
+	}
+	.ssr-clash-ui .scui-card.is-collapsed .scui-card-head { padding-bottom: 9px; }
+	.ssr-clash-ui .scui-card-title {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+		flex: 1 1 auto;
+		background: none;
+		border: 0;
+		padding: 0;
+		margin: 0;
+		font: inherit;
+		color: inherit;
+		cursor: pointer;
+		text-align: left;
+	}
+	.ssr-clash-ui .scui-card-title .scui-icon { color: var(--scui-faint); font-size: 15px; transition: transform 0.18s ease; }
+	.ssr-clash-ui .scui-card.is-collapsed .scui-card-title .scui-icon { transform: rotate(-90deg); }
+	.ssr-clash-ui .scui-card-name {
+		font-size: 14px;
+		font-weight: 600;
+		letter-spacing: 0.1px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.ssr-clash-ui .scui-badge {
+		flex: 0 0 auto;
+		padding: 1px 7px;
+		border-radius: 6px;
+		background: var(--scui-surface-2);
+		border: 1px solid var(--scui-line);
+		color: var(--scui-muted);
+		font-size: 11px;
+		font-weight: 500;
+		white-space: nowrap;
+	}
+	.ssr-clash-ui .scui-card-head-r { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+	.ssr-clash-ui .scui-card.is-collapsed .scui-card-body { display: none; }
+
+	.ssr-clash-ui .scui-card-body { padding: 0 12px 12px; }
+
+	/* 下拉选择：贴近现代表单控件 */
+	.ssr-clash-ui .scui-select {
+		width: 100%;
+		height: 34px;
+		padding: 0 32px 0 11px;
+		border-radius: 9px;
+		border: 1px solid var(--scui-line-strong);
+		background-color: var(--scui-surface-2) !important;
+		color: var(--scui-fg) !important;
+		font: inherit;
+		font-size: 13px;
+		box-sizing: border-box;
+		box-shadow: none !important;
+		outline: none;
+		cursor: pointer;
+		-webkit-appearance: none;
+		appearance: none;
+		background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2398a0b3' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+		background-repeat: no-repeat;
+		background-position: right 10px center;
+		background-size: 14px 14px;
+		transition: border-color 0.15s ease, box-shadow 0.15s ease;
+	}
+	.ssr-clash-ui .scui-select:hover { border-color: var(--scui-faint); }
+	.ssr-clash-ui .scui-select:focus { border-color: var(--scui-accent) !important; box-shadow: 0 0 0 3px var(--scui-accent-ring) !important; }
+	.ssr-clash-ui .scui-select option { background: var(--scui-surface); color: var(--scui-fg); }
+
+	/* 当前 / 实际出口 摘要行 */
+	.ssr-clash-ui .scui-facts {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px 10px;
+		margin: 9px 0 0;
+		font-size: 12.5px;
+		color: var(--scui-muted);
+	}
+	.ssr-clash-ui .scui-fact { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+	.ssr-clash-ui .scui-fact-key { color: var(--scui-faint); flex: 0 0 auto; }
+	.ssr-clash-ui .scui-fact-node {
+		font-weight: 600;
+		color: var(--scui-fg);
+		max-width: 320px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.ssr-clash-ui .scui-arrow { color: var(--scui-faint); font-size: 12px; }
+
+	/* 节点列表 */
+	.ssr-clash-ui .scui-nodes {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin-top: 10px;
+		padding-top: 10px;
+		border-top: 1px dashed var(--scui-line);
+	}
+	.ssr-clash-ui .scui-node {
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		max-width: 100%;
+		padding: 4px 9px 4px 8px;
+		border-radius: 9px;
+		border: 1px solid var(--scui-none-bd);
+		background: var(--scui-none-bg);
+		color: var(--scui-none-fg);
+		font-size: 12px;
+		line-height: 1.5;
+		cursor: pointer;
+		transition: background-color 0.14s ease, border-color 0.14s ease, transform 0.08s ease;
+		box-sizing: border-box;
+	}
+	.ssr-clash-ui .scui-node:hover { transform: translateY(-1px); border-color: var(--scui-faint); }
+	.ssr-clash-ui .scui-node.d-fast { background: var(--scui-fast-bg); border-color: var(--scui-fast-bd); color: var(--scui-fast-fg); }
+	.ssr-clash-ui .scui-node.d-ok { background: var(--scui-ok-bg); border-color: var(--scui-ok-bd); color: var(--scui-ok-fg); }
+	.ssr-clash-ui .scui-node.d-slow { background: var(--scui-slow-bg); border-color: var(--scui-slow-bd); color: var(--scui-slow-fg); }
+	.ssr-clash-ui .scui-node.d-bad { background: var(--scui-bad-bg); border-color: var(--scui-bad-bd); color: var(--scui-bad-fg); }
+	.ssr-clash-ui .scui-node-name {
+		max-width: 190px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--scui-fg);
+	}
+	.ssr-clash-ui .scui-node-ms { font-variant-numeric: tabular-nums; opacity: 0.85; flex: 0 0 auto; }
+	.ssr-clash-ui .scui-node-leaf {
+		color: var(--scui-faint);
+		max-width: 130px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		flex: 0 0 auto;
+	}
+	.ssr-clash-ui .scui-node.is-current {
+		border-color: var(--scui-accent) !important;
+		box-shadow: 0 0 0 2px var(--scui-accent-ring);
+		font-weight: 600;
+	}
+	.ssr-clash-ui .scui-node.is-current .scui-node-name { color: inherit; }
+	.ssr-clash-ui .scui-node .scui-icon { font-size: 11px; opacity: 0.9; }
+
+	.ssr-clash-ui .scui-nodes-toggle { align-self: center; }
+
+	/* 空状态 */
+	.ssr-clash-ui .scui-empty {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		padding: 44px 16px;
+		color: var(--scui-faint);
+		text-align: center;
+		background: var(--scui-surface);
+		border: 1px dashed var(--scui-line-strong);
+		border-radius: var(--scui-radius);
+	}
+	.ssr-clash-ui .scui-empty .scui-icon { font-size: 26px; opacity: 0.6; }
+
+	/* ---------------------------------------------------------------- 弹窗内部微调 */
+	#ssr-clash-modal.ssr-clash-ui { padding: 0; }
+	#ssr-clash-modal .scui-modal-head {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		flex-wrap: wrap;
+		padding: 12px 16px;
+		border-bottom: 1px solid var(--scui-line);
+		position: sticky;
+		top: 0;
+		z-index: 10;
+		background: var(--scui-surface);
+		backdrop-filter: saturate(180%) blur(6px);
+	}
+	#ssr-clash-modal .scui-modal-title {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-width: 0;
+		flex: 1 1 auto;
+	}
+	#ssr-clash-modal .scui-modal-title-text { font-size: 16px; font-weight: 650; letter-spacing: 0.2px; white-space: nowrap; }
+	#ssr-clash-modal .scui-modal-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+	#ssr-clash-modal .scui-modal-body { padding: 12px 16px 16px; }
+
+	/* 客户端规则表现代化 */
+	#ssr-clash-client-rules .scui-rules-note {
+		color: var(--scui-muted);
+		font-size: 12.5px;
+		line-height: 1.6;
+		margin: 0 0 12px;
+		padding: 10px 12px;
+		border-radius: 9px;
+		background: var(--scui-accent-soft);
+		border: 1px solid var(--scui-accent-ring);
+	}
+	#ssr-clash-client-rules table {
+		width: 100%;
+		border-collapse: separate;
+		border-spacing: 0;
+		overflow: visible;
+	}
+	#ssr-clash-client-rules th,
+	#ssr-clash-client-rules td {
+		padding: 8px 6px;
+		vertical-align: middle;
+		overflow: visible;
+		position: relative;
+	}
+	#ssr-clash-client-rules th {
+		color: var(--scui-faint);
+		font-weight: 600;
+		font-size: 12px;
+		text-align: left;
+		border-bottom: 1px solid var(--scui-line);
+		white-space: nowrap;
+	}
+	#ssr-clash-client-rules tbody tr:hover td { background: var(--scui-surface-2); }
+	#ssr-clash-client-rules .cbi-input-select,
+	#ssr-clash-client-rules .cbi-input-text,
+	#ssr-clash-client-rules select,
+	#ssr-clash-client-rules input[type="text"] {
+		width: 100%;
+		height: 32px;
+		padding: 0 9px;
+		border-radius: 8px;
+		background: var(--scui-surface-2) !important;
+		color: var(--scui-fg) !important;
+		border: 1px solid var(--scui-line-strong) !important;
+		box-shadow: none !important;
+		box-sizing: border-box;
+		outline: none;
+	}
+	#ssr-clash-client-rules .cbi-input-select:focus,
+	#ssr-clash-client-rules .cbi-input-text:focus { border-color: var(--scui-accent) !important; box-shadow: 0 0 0 3px var(--scui-accent-ring) !important; }
+	#ssr-clash-client-rules input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--scui-accent); cursor: pointer; }
+	#ssr-clash-client-rules .ssr-client-input-wrap { position: relative; z-index: 50; }
+	#ssr-clash-client-rules .ssr-client-suggest {
+		display: none;
+		position: absolute;
+		left: 0;
+		right: 0;
+		top: calc(100% + 4px);
+		z-index: 2005;
+		max-height: 240px;
+		overflow: auto;
+		background: var(--scui-surface);
+		color: var(--scui-fg);
+		border: 1px solid var(--scui-line-strong);
+		border-radius: 9px;
+		box-shadow: var(--scui-shadow);
+		min-width: 100%;
+	}
+	#ssr-clash-client-rules .ssr-client-suggest.is-open { display: block; }
+	#ssr-clash-client-rules tr:has(.ssr-client-suggest.is-open),
+	#ssr-clash-client-rules td:has(.ssr-client-suggest.is-open) { z-index: 60; }
+	#ssr-clash-client-rules .ssr-client-suggest-item { padding: 9px 12px; cursor: pointer; line-height: 1.4; word-break: break-all; font-size: 12.5px; }
+	#ssr-clash-client-rules .ssr-client-suggest-item:hover,
+	#ssr-clash-client-rules .ssr-client-suggest-item.active { background: var(--scui-accent-soft); }
+	#ssr-clash-client-rules option { background: var(--scui-surface); color: var(--scui-fg); }
+	#ssr-clash-client-rules .ssr-clash-rules-empty { color: var(--scui-faint); padding: 22px 0; text-align: center; }
+	#ssr-clash-client-rules .scui-rules-actions { display: flex; gap: 8px; }
+
+	/* 弹窗 / 独立页 按钮统一 */
+	#ssr-clash-modal .btn.cbi-button,
+	#ssr-clash-main-buttons .btn.cbi-button,
+	.ssr-clash-ui .scui-modal-actions .btn.cbi-button {
+		border-radius: 9px;
+		font-size: 12.5px;
+		padding: 5px 12px;
+	}
+	html[data-darkmode="true"] #ssr-clash-modal .btn.cbi-button {
+		background: var(--scui-surface-2) !important;
+		color: var(--scui-fg) !important;
+		border-color: var(--scui-line-strong) !important;
+	}
+	html[data-darkmode="true"] #ssr-clash-modal .btn.cbi-button-apply {
+		background: var(--scui-accent) !important;
+		border-color: var(--scui-accent) !important;
+		color: #ffffff !important;
+	}
+
+	/* 主面板触发按钮行 */
+	#ssr-clash-main-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0; }
+
+	/* ---------------------------------------------------------------- 独立页 */
+	.scui-page {
+		background: var(--scui-bg);
+		border-radius: var(--scui-radius);
+		padding: 14px;
+		box-sizing: border-box;
+	}
+	.scui-page .scui-page-head {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		flex-wrap: wrap;
+		margin: 0 0 12px;
+	}
+	.scui-page h2 { margin: 0; font-size: 18px; font-weight: 650; color: var(--scui-fg); }
+	.scui-page .cbi-map-descr { color: var(--scui-muted); font-size: 12.5px; }
+
+	/* ---------------------------------------------------------------- 分组管理 */
+	.scui-gm-mask {
+		display: none;
+		position: fixed;
+		inset: 0;
+		background: rgba(15, 20, 34, 0.42);
+		backdrop-filter: blur(2px);
+		z-index: 2100;
+	}
+	html[data-darkmode="true"] .scui-gm-mask { background: rgba(0, 0, 0, 0.66); }
+	.scui-gm-mask.is-open { display: block; }
+
+	.scui-gm {
+		display: none;
+		position: fixed;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		width: min(780px, calc(100vw - 32px));
+		max-height: min(88vh, calc(100vh - 40px));
+		overflow: auto;
+		background: var(--scui-surface);
+		color: var(--scui-fg);
+		border: 1px solid var(--scui-line);
+		border-radius: 16px;
+		box-shadow: 0 32px 80px -24px rgba(12, 18, 40, 0.45), 0 4px 16px rgba(12, 18, 40, 0.12);
+		z-index: 2101;
+		-webkit-overflow-scrolling: touch;
+	}
+	html[data-darkmode="true"] .scui-gm {
+		box-shadow: 0 36px 90px -28px rgba(0, 0, 0, 0.9), 0 2px 10px rgba(0, 0, 0, 0.5);
+	}
+	.scui-gm.is-open { display: block; }
+	.scui-gm, .scui-gm *, .scui-gm *::before, .scui-gm *::after { box-sizing: border-box; }
+
+	.scui-gm-head {
+		position: sticky;
+		top: 0;
+		z-index: 2;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 12px 16px;
+		background: var(--scui-surface);
+		border-bottom: 1px solid var(--scui-line);
+	}
+	.scui-gm-title { font-size: 15px; font-weight: 650; }
+	.scui-gm-body { padding: 14px 16px 16px; }
+	.scui-gm .scui-gm-spacer { flex: 1 1 auto; }
+
+	.scui-gm-note {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 6px;
+		padding: 10px 12px;
+		margin-bottom: 14px;
+		border-radius: 10px;
+		border: 1px solid var(--scui-line);
+		background: var(--scui-surface-2);
+		color: var(--scui-muted);
+		font-size: 12.5px;
+	}
+	.scui-gm-note b { color: var(--scui-fg); }
+	.scui-gm-note.is-on { border-color: var(--scui-fast-bd); background: var(--scui-fast-bg); color: var(--scui-fast-fg); }
+	.scui-gm-note.is-on b { color: var(--scui-fast-fg); }
+
+	.scui-gm-section { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
+	.scui-gm-section-title { font-size: 13px; font-weight: 650; color: var(--scui-fg); }
+	.scui-gm .scui-badge {
+		display: inline-flex;
+		align-items: center;
+		height: 18px;
+		padding: 0 7px;
+		border-radius: 999px;
+		border: 1px solid var(--scui-line-strong);
+		background: var(--scui-surface-2);
+		color: var(--scui-muted);
+		font-size: 11px;
+		font-weight: 600;
+		flex: 0 0 auto;
+	}
+
+	.scui-gm-list { display: flex; flex-direction: column; gap: 8px; }
+	.scui-gm-item {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 9px 12px;
+		border: 1px solid var(--scui-line);
+		border-radius: 10px;
+		background: var(--scui-surface);
+		box-shadow: var(--scui-shadow-sm);
+	}
+	.scui-gm-item.is-disabled { opacity: 0.6; }
+	.scui-gm-item-main { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; }
+	.scui-gm-item-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.scui-gm-item-meta { color: var(--scui-muted); font-size: 12px; flex: 0 0 auto; }
+	.scui-gm-item-ops { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+
+	.scui-gm-empty {
+		padding: 16px;
+		border: 1px dashed var(--scui-line-strong);
+		border-radius: 10px;
+		color: var(--scui-faint);
+		text-align: center;
+		font-size: 12.5px;
+	}
+	.scui-gm-actions { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+
+	.scui-gm-form { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+	.scui-gm-field { display: flex; flex-direction: column; gap: 5px; flex: 1 1 220px; }
+	.scui-gm-label { font-size: 12px; color: var(--scui-muted); font-weight: 600; }
+	.scui-gm-input, .scui-gm-select {
+		height: 32px;
+		width: 100%;
+		padding: 0 10px;
+		border-radius: 9px;
+		border: 1px solid var(--scui-line-strong);
+		background: var(--scui-surface);
+		color: var(--scui-fg);
+		font: inherit;
+		font-size: 12.5px;
+	}
+	.scui-gm-input:focus, .scui-gm-select:focus {
+		outline: 2px solid var(--scui-accent-ring);
+		border-color: var(--scui-accent);
+	}
+
+	.scui-gm-subhead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
+	.scui-gm-picked { color: var(--scui-accent); font-weight: 650; font-size: 12.5px; flex: 0 0 auto; }
+	.scui-gm-subhead .scui-search { flex: 0 1 220px; }
+	.scui-gm-subhead .scui-search input { width: 100%; }
+
+	.scui-gm-nodes {
+		max-height: 280px;
+		overflow: auto;
+		padding: 6px;
+		border: 1px solid var(--scui-line);
+		border-radius: 10px;
+		background: var(--scui-surface-2);
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.scui-gm-node {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 5px 8px;
+		border-radius: 7px;
+		cursor: pointer;
+	}
+	.scui-gm-node:hover { background: var(--scui-accent-soft); }
+	.scui-gm-node.is-picked { background: var(--scui-accent-soft); }
+	.scui-gm-node input { accent-color: var(--scui-accent); flex: 0 0 auto; }
+	.scui-gm-node-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+	/* ---------------------------------------------------------------- 响应式 */
+	@media (max-width: 900px) {
+		.scui-gm {
+			top: 8px;
+			left: 8px;
+			transform: none;
+			width: calc(100vw - 16px);
+			max-height: calc(100vh - 16px);
+			border-radius: 14px;
+		}
+		.scui-gm-head { padding: 10px 12px; }
+		.scui-gm-body { padding: 10px 12px 14px; }
+		.scui-gm-subhead .scui-search { flex: 1 1 140px; }
+		.scui-gm-form { flex-direction: column; }
+		.ssr-clash-ui .scui-toolbar { position: static; }
+		.ssr-clash-ui .scui-toolbar-r { margin-left: 0; width: 100%; }
+		.ssr-clash-ui .scui-search input { width: 100%; }
+		.ssr-clash-ui .scui-search { flex: 1 1 140px; }
+		.ssr-clash-ui .scui-node-name { max-width: 130px; }
+		.ssr-clash-ui .scui-fact-node { max-width: 180px; }
+		#ssr-clash-modal .scui-modal-actions { width: 100%; }
+		#ssr-clash-modal .scui-modal-actions .btn.cbi-button { flex: 1 1 auto; }
+		#ssr-clash-main-buttons .btn { flex: 1 1 0; }
+	}
+	@media (max-width: 560px) {
+		.ssr-clash-ui .scui-node-name { max-width: 108px; }
+		.ssr-clash-ui .scui-card-head { flex-wrap: wrap; }
+	}
+</style>
+
+<script type="text/javascript">
+window.ssrClashUI = (function() {
+	'use strict';
+
+	var TEXT = {
+		ready:       '<%:Ready.%>',
+		loading:     '<%:Loading...%>',
+		testing:     '<%:Testing delay...%>',
+		testFailed:  '<%:Delay test failed.%>',
+		switching:   '<%:Switching...%>',
+		switched:    '<%:Switched successfully.%>',
+		switchFail:  '<%:Switch failed.%>',
+		notActive:   '<%:This Clash total node is not active. Apply this node first.%>',
+		noneFound:   '<%:No switchable proxy groups found.%>',
+		noneMatch:   '<%:No groups match the filter.%>',
+		timeout:     '<%:Timeout%>',
+		current:     '<%:Current:%>',
+		autoSel:     '<%:Auto Selected:%>',
+		exitNode:    '<%:Effective Node:%>',
+		speedTest:   '<%:Speed Test%>',
+		testAll:     '<%:Test All Groups%>',
+		refresh:     '<%:Refresh%>',
+		filterPh:    '<%:Filter groups...%>',
+		groupsUnit:  '<%:Proxy Groups%>',
+		nodesUnit:   '<%:Nodes%>',
+		showAll:     '<%:Show all %d nodes%>',
+		showLess:    '<%:Show less%>',
+		expand:      '<%:Expand%>',
+		collapse:    '<%:Collapse%>',
+		switchTo:    '<%:Switch to this node%>',
+		fastest:     '<%:Fastest:%>',
+		emptyTitle:  '<%:No switchable proxy groups found.%>',
+
+		manageGroups:  '<%:Group Manager%>',
+		customGroups:  '<%:Custom Groups%>',
+		newGroup:      '<%:New Group%>',
+		groupName:     '<%:Group Name%>',
+		groupNamePh:   '<%:e.g. My Hong Kong%>',
+		groupMode:     '<%:Mode%>',
+		modeAuto:      '<%:Auto (fastest)%>',
+		modeManual:    '<%:Manual%>',
+		selectNodes:   '<%:Select Nodes%>',
+		selectAll:     '<%:Select All%>',
+		clearSel:      '<%:Clear%>',
+		selectedN:     '<%:Selected: %d%>',
+		nodesCount:    '<%:%d nodes%>',
+		noCustomGroups:'<%:No custom groups yet.%>',
+		noNodesMatch:  '<%:No nodes match the filter.%>',
+		filterNodes:   '<%:Filter nodes...%>',
+		close:         '<%:Close%>',
+		edit:          '<%:Edit%>',
+		remove:        '<%:Delete%>',
+		save:          '<%:Save%>',
+		cancel:        '<%:Cancel%>',
+		confirmDeleteGroup: '<%:Delete this custom group?%>',
+		nameRequired:  '<%:Group name is required.%>',
+		nodesRequired: '<%:Pick at least one node.%>',
+		groupSaved:    '<%:Custom group saved.%>',
+		groupSavedApplied: '<%:Custom group saved and applied.%>',
+		groupDeleted:  '<%:Custom group deleted.%>',
+		groupDeletedApplied: '<%:Custom group deleted and applied.%>',
+		groupSaveFail: '<%:Failed to save the custom group.%>',
+		groupDeleteFail: '<%:Failed to delete the custom group.%>',
+		autoRegionOn:  '<%:Region auto-grouping is ON%>',
+		autoRegionOff: '<%:Region auto-grouping is OFF%>',
+		autoRegionHint: '<%:Nodes are grouped by region (at least %d nodes each); every region group picks its own fastest node, and the group names are added to each route group.%>',
+		autoRegionOffHint: '<%:Turn on "Mihomo Smart Grouping and Auto Select" on the Servers page first.%>'
+	};
+
+	var TRANSLATE = {
+		'Selector': '<%:Selector%>',
+		'Direct': '<%:Direct%>',
+		'DIRECT': '<%:Direct%>',
+		'Reject': '<%:Reject%>',
+		'REJECT': '<%:Reject%>',
+		'Proxy': '<%:Proxy%>',
+		'Domestic': '<%:Domestic%>',
+		'GlobalTV': '<%:GlobalTV%>',
+		'AsianTV': '<%:AsianTV%>',
+		'Others': '<%:Others%>',
+		'GLOBAL': '<%:GLOBAL%>',
+		'url-test': '<%:url-test%>',
+		'URLTest': '<%:url-test%>',
+		'fallback': '<%:fallback%>',
+		'Fallback': '<%:fallback%>',
+		'load-balance': '<%:load-balance%>',
+		'LoadBalance': '<%:load-balance%>',
+		'relay': '<%:relay%>',
+		'Compatible': '<%:Compatible%>',
+		'Pass': '<%:Pass%>'
+	};
+
+	var COLLAPSE_AT = 12;
+	var PREVIEW_N = 6;
+
+	var ICONS = {
+		chevron: '<polyline points="6 9 12 15 18 9"/>',
+		bolt: '<path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/>',
+		refresh: '<path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"/><path d="M21 4v5h-5"/>',
+		search: '<circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-3.6-3.6"/>',
+		check: '<polyline points="20 6 9 17 4 12"/>',
+		inbox: '<path d="M3 13h4l1.5 3h7L17 13h4"/><path d="M5 5h14l2 8v6H3v-6z"/>',
+		group: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
+		plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+		trash: '<path d="M3 6h18"/><path d="M9 6V4h6v2"/><path d="M6 6l1 14h10l1-14"/>',
+		pencil: '<path d="M4 20h4L18.5 9.5a1.8 1.8 0 0 0-2.5-2.5L5.5 17.5z"/><path d="M13.5 7.5 16.5 10.5"/>'
+	};
+
+	// ------------------------------------------------------------------ 工具
+
+	function el(tag, cls, text) {
+		var node = document.createElement(tag);
+		if (cls) {
+			node.className = cls;
+		}
+		if (text !== undefined && text !== null) {
+			node.textContent = String(text);
+		}
+		return node;
+	}
+
+	function icon(name) {
+		var span = el('span', 'scui-icon');
+		span.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + '</svg>';
+		return span;
+	}
+
+	// 带 %d 的模板串做整型替换
+	function tpl(str, value) {
+		return String(str).replace('%d', value);
+	}
+
+	function translateName(name) {
+		return TRANSLATE[name] || name;
+	}
+
+	function toNumber(ms) {
+		var n = Number(ms);
+		if (ms === null || ms === undefined || ms === false || !isFinite(n) || n <= 0) {
+			return null;
+		}
+		return n;
+	}
+
+	function formatDelay(ms) {
+		var n = toNumber(ms);
+		if (n === null) {
+			return null;
+		}
+		if (n >= 1000) {
+			return (n / 1000).toFixed(2) + ' s';
+		}
+		return Math.round(n) + ' ms';
+	}
+
+	function delayClass(ms) {
+		var n = toNumber(ms);
+		if (n === null) {
+			return 'd-none';
+		}
+		if (n < 200) return 'd-fast';
+		if (n < 500) return 'd-ok';
+		if (n < 1000) return 'd-slow';
+		return 'd-bad';
+	}
+
+	function delayPill(ms) {
+		var pill = el('span', 'scui-pill ' + delayClass(ms));
+		pill.textContent = formatDelay(ms) || TEXT.timeout;
+		return pill;
+	}
+
+	function memberDelay(member) {
+		if (!member) {
+			return null;
+		}
+		return member.auto ? member.leaf_delay : member.delay;
+	}
+
+	function memberLabel(member) {
+		if (member && member.auto && member.leaf && member.leaf !== member.name) {
+			return translateName(member.name) + ' → ' + translateName(member.leaf);
+		}
+		return translateName(member ? member.name : '');
+	}
+
+	function sortMembers(members) {
+		return (members || []).slice().sort(function(a, b) {
+			var av = toNumber(a && (a.auto ? a.leaf_delay : a.delay));
+			var bv = toNumber(b && (b.auto ? b.leaf_delay : b.delay));
+			av = av === null ? Infinity : av;
+			bv = bv === null ? Infinity : bv;
+			if (av === bv) {
+				return String(a && a.name).localeCompare(String(b && b.name));
+			}
+			return av - bv;
+		});
+	}
+
+	function findMember(group, name) {
+		var found = null;
+		(group.members || []).forEach(function(item) {
+			if (item && item.name === name) {
+				found = item;
+			}
+		});
+		if (!found) {
+			// 兜底：根据名字推一个空壳成员
+			var leaf = null;
+			return { name: name, delay: null, leaf: leaf, leaf_delay: null, auto: false, is_group: false };
+		}
+		return found;
+	}
+
+	// ------------------------------------------------------------------ 分组管理
+
+	// 分组管理：列出自动分组状态 + 自定义分组的增删改。
+	// DOM 直接挂 body —— .scui-gm 是 position:fixed，挂进带 transform 的弹窗里会定位错乱。
+	function createGroupManager(opts) {
+		opts = opts || {};
+		var xhr = opts.xhr || window.ssrXHR || window.XHR;
+		var urls = opts.urls || {};
+		var getSid = opts.getSid || function() { return ''; };
+		var notify = opts.notify || function() {};
+		var onSaved = opts.onSaved || function() {};
+
+		var mask = null;
+		var modal = null;
+		var body = null;
+
+		var state = {
+			nodes: [],
+			groups: [],
+			meta: { autoRegions: false, autoRegionsMin: '2' },
+			draft: null,
+			nodeFilter: ''
+		};
+
+		function close() {
+			if (modal) { modal.className = 'ssr-clash-ui scui-gm'; }
+			if (mask) { mask.className = 'scui-gm-mask'; }
+		}
+
+		function ensureDom() {
+			if (modal) {
+				return;
+			}
+
+			mask = el('div', 'scui-gm-mask');
+			mask.onclick = close;
+
+			modal = el('div', 'ssr-clash-ui scui-gm');
+			modal.setAttribute('role', 'dialog');
+			modal.setAttribute('aria-modal', 'true');
+
+			var head = el('div', 'scui-gm-head');
+			head.appendChild(el('div', 'scui-gm-title', TEXT.manageGroups));
+			head.appendChild(el('div', 'scui-gm-spacer'));
+
+			var closeBtn = el('button', 'scui-btn');
+			closeBtn.type = 'button';
+			closeBtn.appendChild(el('span', null, TEXT.close));
+			closeBtn.onclick = close;
+			head.appendChild(closeBtn);
+
+			body = el('div', 'scui-gm-body');
+			modal.appendChild(head);
+			modal.appendChild(body);
+
+			document.body.appendChild(mask);
+			document.body.appendChild(modal);
+
+			document.addEventListener('keydown', function(ev) {
+				if (ev.key === 'Escape' && modal && modal.className.indexOf('is-open') >= 0) {
+					close();
+				}
+			});
+		}
+
+		function open() {
+			ensureDom();
+			state.draft = null;
+			state.nodeFilter = '';
+			mask.className = 'scui-gm-mask is-open';
+			modal.className = 'ssr-clash-ui scui-gm is-open';
+			refresh();
+		}
+
+		function refresh() {
+			if (!xhr || !urls.customGroups) {
+				render();
+				return;
+			}
+			notify(TEXT.loading, 'busy');
+			xhr.get(urls.customGroups, { sid: getSid() }, function(x, result) {
+				if (!result || !result.active) {
+					notify(TEXT.notActive, 'warn');
+					state.nodes = [];
+					state.groups = [];
+					render();
+					return;
+				}
+				state.nodes = result.nodes || [];
+				state.groups = result.groups || [];
+				state.meta = {
+					autoRegions: String(result.auto_regions || '0') === '1',
+					autoRegionsMin: String(result.auto_regions_min || '2')
+				};
+				notify(TEXT.ready, 'ok');
+				render();
+			});
+		}
+
+		function render() {
+			if (!body) {
+				return;
+			}
+			body.innerHTML = '';
+			if (state.draft) {
+				renderEditor();
+			} else {
+				renderList();
+			}
+		}
+
+		// ---- 列表
+		function renderList() {
+			var note = el('div', 'scui-gm-note' + (state.meta.autoRegions ? ' is-on' : ''));
+			note.appendChild(el('b', null, state.meta.autoRegions ? TEXT.autoRegionOn : TEXT.autoRegionOff));
+			note.appendChild(el('span', null, state.meta.autoRegions
+				? tpl(TEXT.autoRegionHint, state.meta.autoRegionsMin)
+				: TEXT.autoRegionOffHint));
+			body.appendChild(note);
+
+			var section = el('div', 'scui-gm-section');
+			section.appendChild(el('span', 'scui-gm-section-title', TEXT.customGroups));
+			section.appendChild(el('span', 'scui-badge', String(state.groups.length)));
+			body.appendChild(section);
+
+			if (!state.groups.length) {
+				body.appendChild(el('div', 'scui-gm-empty', TEXT.noCustomGroups));
+			} else {
+				var list = el('div', 'scui-gm-list');
+				state.groups.forEach(function(group) {
+					list.appendChild(buildItem(group));
+				});
+				body.appendChild(list);
+			}
+
+			var actions = el('div', 'scui-gm-actions');
+			var addBtn = el('button', 'scui-btn scui-btn-primary');
+			addBtn.type = 'button';
+			addBtn.appendChild(icon('plus'));
+			addBtn.appendChild(el('span', null, TEXT.newGroup));
+			addBtn.onclick = function() {
+				state.draft = { id: '', name: '', mode: 'auto', enabled: true, nodes: [] };
+				state.nodeFilter = '';
+				render();
+			};
+			actions.appendChild(addBtn);
+			body.appendChild(actions);
+		}
+
+		function buildItem(group) {
+			var item = el('div', 'scui-gm-item' + (group.enabled === false ? ' is-disabled' : ''));
+			var main = el('div', 'scui-gm-item-main');
+			main.appendChild(el('span', 'scui-gm-item-name', group.name));
+			main.appendChild(el('span', 'scui-badge', group.mode === 'manual' ? TEXT.modeManual : TEXT.modeAuto));
+			main.appendChild(el('span', 'scui-gm-item-meta', tpl(TEXT.nodesCount, (group.nodes || []).length)));
+			item.appendChild(main);
+
+			var ops = el('div', 'scui-gm-item-ops');
+
+			var editBtn = el('button', 'scui-btn scui-btn-ghost');
+			editBtn.type = 'button';
+			editBtn.appendChild(icon('pencil'));
+			editBtn.appendChild(el('span', null, TEXT.edit));
+			editBtn.onclick = function() {
+				state.draft = {
+					id: group.id,
+					name: group.name,
+					mode: group.mode,
+					enabled: group.enabled !== false,
+					nodes: (group.nodes || []).slice()
+				};
+				state.nodeFilter = '';
+				render();
+			};
+			ops.appendChild(editBtn);
+
+			var delBtn = el('button', 'scui-btn scui-btn-ghost');
+			delBtn.type = 'button';
+			delBtn.appendChild(icon('trash'));
+			delBtn.appendChild(el('span', null, TEXT.remove));
+			delBtn.onclick = function() {
+				if (!window.confirm(TEXT.confirmDeleteGroup)) {
+					return;
+				}
+				delBtn.disabled = true;
+				xhr.post(urls.customGroupDelete, { id: group.id }, function(x, result) {
+					if (result && result.success) {
+						state.groups = result.groups || [];
+						notify(result.reapplied ? TEXT.groupDeletedApplied : TEXT.groupDeleted, 'ok');
+						render();
+						onSaved();
+					} else {
+						delBtn.disabled = false;
+						notify(TEXT.groupDeleteFail, 'err');
+					}
+				});
+			};
+			ops.appendChild(delBtn);
+
+			item.appendChild(ops);
+			return item;
+		}
+
+		// ---- 编辑
+		function renderEditor() {
+			var draft = state.draft;
+			var form = el('div', 'scui-gm-form');
+
+			var nameField = el('label', 'scui-gm-field');
+			nameField.appendChild(el('span', 'scui-gm-label', TEXT.groupName));
+			var nameInput = el('input', 'scui-gm-input');
+			nameInput.type = 'text';
+			nameInput.value = draft.name;
+			nameInput.placeholder = TEXT.groupNamePh;
+			nameInput.maxLength = 60;
+			nameInput.oninput = function() { draft.name = nameInput.value; };
+			nameField.appendChild(nameInput);
+			form.appendChild(nameField);
+
+			var modeField = el('label', 'scui-gm-field');
+			modeField.appendChild(el('span', 'scui-gm-label', TEXT.groupMode));
+			var modeSelect = el('select', 'scui-gm-select');
+			[['auto', TEXT.modeAuto], ['manual', TEXT.modeManual]].forEach(function(pair) {
+				var option = document.createElement('option');
+				option.value = pair[0];
+				option.textContent = pair[1];
+				if (pair[0] === draft.mode) {
+					option.selected = true;
+				}
+				modeSelect.appendChild(option);
+			});
+			modeSelect.onchange = function() { draft.mode = modeSelect.value; };
+			modeField.appendChild(modeSelect);
+			form.appendChild(modeField);
+			body.appendChild(form);
+
+			var pickedEl = el('span', 'scui-gm-picked', tpl(TEXT.selectedN, draft.nodes.length));
+			var nodeWrap = el('div', 'scui-gm-nodes');
+
+			function isPicked(name) {
+				return draft.nodes.indexOf(name) >= 0;
+			}
+
+			function updatePicked() {
+				pickedEl.textContent = tpl(TEXT.selectedN, draft.nodes.length);
+			}
+
+			function filterText() {
+				return String(state.nodeFilter || '').trim().toLowerCase();
+			}
+
+			function matches(name) {
+				var needle = filterText();
+				return !needle || String(name).toLowerCase().indexOf(needle) >= 0;
+			}
+
+			function pick(name) {
+				if (!isPicked(name)) {
+					draft.nodes.push(name);
+				}
+			}
+
+			function unpick(name) {
+				var index = draft.nodes.indexOf(name);
+				if (index >= 0) {
+					draft.nodes.splice(index, 1);
+				}
+			}
+
+			function renderNodeList() {
+				nodeWrap.innerHTML = '';
+				var visible = (state.nodes || []).filter(matches);
+				if (!visible.length) {
+					nodeWrap.appendChild(el('div', 'scui-gm-empty', TEXT.noNodesMatch));
+					return;
+				}
+				visible.forEach(function(name) {
+					var row = el('label', 'scui-gm-node' + (isPicked(name) ? ' is-picked' : ''));
+					var box = el('input');
+					box.type = 'checkbox';
+					box.checked = isPicked(name);
+					box.onchange = function() {
+						if (box.checked) {
+							pick(name);
+						} else {
+							unpick(name);
+						}
+						row.className = 'scui-gm-node' + (box.checked ? ' is-picked' : '');
+						updatePicked();
+					};
+					row.appendChild(box);
+					row.appendChild(el('span', 'scui-gm-node-name', translateName(name)));
+					nodeWrap.appendChild(row);
+				});
+			}
+
+			var subhead = el('div', 'scui-gm-subhead');
+			subhead.appendChild(el('span', 'scui-gm-section-title', TEXT.selectNodes));
+			subhead.appendChild(pickedEl);
+			subhead.appendChild(el('span', 'scui-gm-spacer'));
+
+			var allBtn = el('button', 'scui-btn scui-btn-ghost');
+			allBtn.type = 'button';
+			allBtn.title = TEXT.selectAll;
+			allBtn.appendChild(el('span', null, TEXT.selectAll));
+			allBtn.onclick = function() {
+				(state.nodes || []).filter(matches).forEach(pick);
+				renderNodeList();
+				updatePicked();
+			};
+			subhead.appendChild(allBtn);
+
+			var noneBtn = el('button', 'scui-btn scui-btn-ghost');
+			noneBtn.type = 'button';
+			noneBtn.title = TEXT.clearSel;
+			noneBtn.appendChild(el('span', null, TEXT.clearSel));
+			noneBtn.onclick = function() {
+				(state.nodes || []).filter(matches).forEach(unpick);
+				renderNodeList();
+				updatePicked();
+			};
+			subhead.appendChild(noneBtn);
+
+			var search = el('span', 'scui-search');
+			search.appendChild(icon('search'));
+			var searchInput = el('input');
+			searchInput.type = 'text';
+			searchInput.placeholder = TEXT.filterNodes;
+			searchInput.value = state.nodeFilter;
+			searchInput.oninput = function() {
+				state.nodeFilter = searchInput.value;
+				renderNodeList();
+			};
+			search.appendChild(searchInput);
+			subhead.appendChild(search);
+			body.appendChild(subhead);
+
+			renderNodeList();
+			body.appendChild(nodeWrap);
+
+			var actions = el('div', 'scui-gm-actions');
+			var saveBtn = el('button', 'scui-btn scui-btn-primary');
+			saveBtn.type = 'button';
+			saveBtn.appendChild(icon('check'));
+			saveBtn.appendChild(el('span', null, TEXT.save));
+			saveBtn.onclick = function() { save(saveBtn); };
+			actions.appendChild(saveBtn);
+
+			var cancelBtn = el('button', 'scui-btn');
+			cancelBtn.type = 'button';
+			cancelBtn.appendChild(el('span', null, TEXT.cancel));
+			cancelBtn.onclick = function() {
+				state.draft = null;
+				render();
+			};
+			actions.appendChild(cancelBtn);
+			body.appendChild(actions);
+		}
+
+		function save(btn) {
+			var draft = state.draft;
+			if (!draft) {
+				return;
+			}
+			var name = String(draft.name || '').trim();
+			if (!name) {
+				notify(TEXT.nameRequired, 'err');
+				return;
+			}
+			if (!draft.nodes.length) {
+				notify(TEXT.nodesRequired, 'err');
+				return;
+			}
+
+			var payload = {
+				id: draft.id || '',
+				name: name,
+				mode: draft.mode === 'manual' ? 'manual' : 'auto',
+				enabled: draft.enabled === false ? '0' : '1',
+				node_count: String(draft.nodes.length)
+			};
+			draft.nodes.forEach(function(node, index) {
+				payload['node_' + (index + 1)] = node;
+			});
+
+			btn.disabled = true;
+			var ic = btn.querySelector('.scui-icon');
+			if (ic) { ic.style.animation = 'scui-spin 0.9s linear infinite'; }
+
+			xhr.post(urls.customGroupSave, payload, function(x, result) {
+				btn.disabled = false;
+				if (ic) { ic.style.animation = ''; }
+				if (result && result.success) {
+					state.groups = result.groups || [];
+					state.draft = null;
+					notify(result.reapplied ? TEXT.groupSavedApplied : TEXT.groupSaved, 'ok');
+					render();
+					onSaved();
+				} else {
+					notify(TEXT.groupSaveFail, 'err');
+				}
+			});
+		}
+
+		return {
+			open: open,
+			close: close,
+			refresh: refresh
+		};
+	}
+
+	// ------------------------------------------------------------------ 组件
+
+	function create(opts) {
+		opts = opts || {};
+		var mount = opts.mount;
+		var statusEl = opts.statusEl || null;
+		var xhr = opts.xhr || window.ssrXHR || window.XHR;
+		var urls = opts.urls || {};
+		var sid = opts.sid || '';
+		var testing = false;
+		var groups = [];
+		var testUrl = '';
+		var testInterval = '';
+		var filterText = '';
+		var expandedGroups = {};
+		var groupManager = null;
+
+		if (!mount) {
+			return null;
+		}
+
+		// 打开「分组管理」（自动分组状态 + 自定义分组）
+		function openGroupManager() {
+			if (!groupManager) {
+				groupManager = createGroupManager({
+					xhr: xhr,
+					urls: urls,
+					getSid: function() { return sid; },
+					notify: setStatus,
+					onSaved: function() { load(); }
+				});
+			}
+			groupManager.open();
+		}
+
+		// ---- 状态区
+		function setStatus(text, tone) {
+			if (!statusEl) {
+				return;
+			}
+			statusEl.textContent = text || '';
+			statusEl.className = 'scui-status' + (tone ? ' t-' + tone : '');
+			if (tone && tone.charAt(0) === '#') {
+				statusEl.className = 'scui-status';
+				statusEl.style.color = tone;
+			} else {
+				statusEl.style.color = '';
+			}
+		}
+
+		function ok(text) { setStatus(text || TEXT.ready, 'ok'); }
+		function busy(text) { setStatus(text, 'busy'); }
+		function warn(text) { setStatus(text, 'warn'); }
+		function err(text) { setStatus(text, 'err'); }
+
+		// ---- 工具条
+		function buildToolbar() {
+			var bar = el('div', 'scui-toolbar');
+
+			var left = el('div', 'scui-toolbar-l');
+			var testAllBtn = el('button', 'scui-btn scui-btn-primary');
+			testAllBtn.type = 'button';
+			testAllBtn.appendChild(icon('bolt'));
+			testAllBtn.appendChild(el('span', null, TEXT.testAll));
+			testAllBtn.onclick = function() {
+				testAll(groups, testAllBtn);
+			};
+			left.appendChild(testAllBtn);
+
+			var refreshBtn = el('button', 'scui-btn');
+			refreshBtn.type = 'button';
+			refreshBtn.appendChild(icon('refresh'));
+			refreshBtn.appendChild(el('span', null, TEXT.refresh));
+			refreshBtn.onclick = function() { load(); };
+			left.appendChild(refreshBtn);
+
+			var groupBtn = el('button', 'scui-btn');
+			groupBtn.type = 'button';
+			groupBtn.title = TEXT.manageGroups;
+			groupBtn.appendChild(icon('group'));
+			groupBtn.appendChild(el('span', null, TEXT.manageGroups));
+			groupBtn.onclick = function() { openGroupManager(); };
+			left.appendChild(groupBtn);
+
+			var search = el('span', 'scui-search');
+			search.appendChild(icon('search'));
+			var input = el('input');
+			input.type = 'text';
+			input.placeholder = TEXT.filterPh;
+			input.value = filterText;
+			input.oninput = function() {
+				filterText = input.value;
+				paint();
+			};
+			search.appendChild(input);
+			left.appendChild(search);
+			bar.appendChild(left);
+
+			var right = el('div', 'scui-toolbar-r');
+			var meta = el('div', 'scui-meta');
+			var totalNodes = 0;
+			groups.forEach(function(g) { totalNodes += (g.all || []).length; });
+
+			var gStat = el('span');
+			gStat.appendChild(el('b', null, groups.length));
+			gStat.appendChild(document.createTextNode(' ' + TEXT.groupsUnit));
+			meta.appendChild(gStat);
+
+			meta.appendChild(el('span', 'scui-meta-sep'));
+
+			var nStat = el('span');
+			nStat.appendChild(el('b', null, totalNodes));
+			nStat.appendChild(document.createTextNode(' ' + TEXT.nodesUnit));
+			meta.appendChild(nStat);
+
+			if (testUrl || testInterval) {
+				meta.appendChild(el('span', 'scui-meta-sep'));
+				var info = el('span', 'scui-meta-url');
+				var parts = [];
+				if (testUrl) { parts.push(testUrl); }
+				if (testInterval) { parts.push(testInterval + 's'); }
+				info.textContent = parts.join('  ·  ');
+				info.title = info.textContent;
+				meta.appendChild(info);
+			}
+			right.appendChild(meta);
+			bar.appendChild(right);
+
+			return bar;
+		}
+
+		// ---- 单个策略组卡片
+		function buildCard(group) {
+			var card = el('section', 'scui-card');
+			var nowName = group.now || group.resolved || '';
+			var nowMember = nowName ? findMember(group, nowName) : null;
+			var nowDelay = nowMember ? memberDelay(nowMember) : group.delay;
+			var expanded = expandedGroups[group.name] || false;
+			var isCollapsed = expandedGroups['__collapsed__' + group.name] === true;
+
+			if (isCollapsed) {
+				card.className += ' is-collapsed';
+			}
+
+			// ---------- 头部
+			var head = el('div', 'scui-card-head');
+
+			var title = el('button', 'scui-card-title');
+			title.type = 'button';
+			title.title = isCollapsed ? TEXT.expand : TEXT.collapse;
+			title.appendChild(icon('chevron'));
+			title.appendChild(el('span', 'scui-card-name', translateName(group.name)));
+			if (group.type) {
+				title.appendChild(el('span', 'scui-badge', translateName(group.type)));
+			}
+			title.onclick = function() {
+				var collapsed = expandedGroups['__collapsed__' + group.name] === true;
+				expandedGroups['__collapsed__' + group.name] = !collapsed;
+				paint();
+			};
+			head.appendChild(title);
+
+			var headR = el('div', 'scui-card-head-r');
+			if (nowName) {
+				headR.appendChild(delayPill(nowDelay));
+			}
+
+			var testBtn = el('button', 'scui-btn scui-btn-ghost');
+			testBtn.type = 'button';
+			testBtn.title = TEXT.speedTest;
+			testBtn.appendChild(icon('bolt'));
+			testBtn.appendChild(el('span', null, TEXT.speedTest));
+			testBtn.onclick = function() {
+				testBtn.disabled = true;
+				var ic = testBtn.querySelector('.scui-icon');
+				if (ic) { ic.style.animation = 'scui-spin 0.9s linear infinite'; }
+				runDelayTest(group.name, function(success) {
+					testBtn.disabled = false;
+					if (ic) { ic.style.animation = ''; }
+					if (success) {
+						ok();
+						load();
+					}
+				});
+			};
+			headR.appendChild(testBtn);
+			head.appendChild(headR);
+			card.appendChild(head);
+
+			// ---------- 主体
+			var body = el('div', 'scui-card-body');
+
+			var select = el('select', 'scui-select');
+			(group.all || []).forEach(function(name) {
+				var option = document.createElement('option');
+				option.value = name;
+				var member = findMember(group, name);
+				var label = translateName(name);
+				var d = formatDelay(memberDelay(member));
+				option.textContent = d ? (label + '  ·  ' + d) : label;
+				if (name === group.now) {
+					option.selected = true;
+				}
+				select.appendChild(option);
+			});
+			select.onchange = function() {
+				busy(TEXT.switching);
+				if (xhr && urls.switch) {
+					xhr.get(urls.switch, { sid: sid, group: group.name, name: select.value }, function(x, result) {
+						if (result && result.success) {
+							ok(TEXT.switched);
+							load();
+						} else {
+							err(TEXT.switchFail);
+							select.value = group.now || select.value;
+						}
+					});
+				}
+			};
+			body.appendChild(select);
+
+			// 当前 / 实际出口
+			var facts = el('div', 'scui-facts');
+			var curFact = el('span', 'scui-fact');
+			curFact.appendChild(el('span', 'scui-fact-key', (group.auto ? TEXT.autoSel : TEXT.current)));
+			curFact.appendChild(el('span', 'scui-fact-node', translateName(group.now || '—')));
+			if (nowDelay) {
+				curFact.appendChild(delayPill(nowDelay));
+			}
+			facts.appendChild(curFact);
+
+			if (group.resolved && group.resolved !== group.now) {
+				facts.appendChild(el('span', 'scui-arrow', '→'));
+				var exitFact = el('span', 'scui-fact');
+				exitFact.appendChild(el('span', 'scui-fact-key', TEXT.exitNode));
+				exitFact.appendChild(el('span', 'scui-fact-node', translateName(group.resolved)));
+				var rd = formatDelay(group.resolved_delay);
+				if (rd) {
+					exitFact.appendChild(delayPill(group.resolved_delay));
+				}
+				facts.appendChild(exitFact);
+			} else if (group.auto && group.members && group.members.length) {
+				// 自动组：额外标出最快的节点
+				var sortedAll = sortMembers(group.members);
+				if (sortedAll.length && toNumber(memberDelay(sortedAll[0])) !== null) {
+					facts.appendChild(el('span', 'scui-arrow', '·'));
+					var bestFact = el('span', 'scui-fact');
+					bestFact.appendChild(el('span', 'scui-fact-key', TEXT.fastest));
+					bestFact.appendChild(el('span', 'scui-fact-node', memberLabel(sortedAll[0])));
+					facts.appendChild(bestFact);
+				}
+			}
+			body.appendChild(facts);
+
+			// ---------- 节点列表
+			var members = sortMembers(group.members);
+			if (members.length) {
+				var nodes = el('div', 'scui-nodes');
+				var limit = (expanded || members.length <= COLLAPSE_AT) ? members.length : PREVIEW_N;
+
+				members.slice(0, limit).forEach(function(member) {
+					nodes.appendChild(buildNodeChip(group, member));
+				});
+
+				if (members.length > COLLAPSE_AT) {
+					var more = el('button', 'scui-btn scui-btn-ghost scui-nodes-toggle');
+					more.type = 'button';
+					if (expanded) {
+						more.appendChild(el('span', null, TEXT.showLess));
+					} else {
+						more.appendChild(el('span', null, tpl(TEXT.showAll, members.length)));
+					}
+					more.onclick = function() {
+						expandedGroups[group.name] = !expanded;
+						paint();
+					};
+					nodes.appendChild(more);
+				}
+				body.appendChild(nodes);
+			}
+
+			card.appendChild(body);
+			return card;
+		}
+
+		function buildNodeChip(group, member) {
+			var d = memberDelay(member);
+			var chip = el('span', 'scui-node ' + delayClass(d));
+			chip.title = TEXT.switchTo + ': ' + memberLabel(member);
+			if (member.name === group.now) {
+				chip.className += ' is-current';
+				chip.appendChild(icon('check'));
+			} else if (member.is_group) {
+				chip.appendChild(icon('group'));
+			}
+			chip.appendChild(el('span', 'scui-node-name', translateName(member.name)));
+			if (member.auto && member.leaf && member.leaf !== member.name) {
+				chip.appendChild(el('span', 'scui-node-leaf', '→ ' + translateName(member.leaf)));
+			}
+			chip.appendChild(el('span', 'scui-node-ms', formatDelay(d) || TEXT.timeout));
+
+			chip.onclick = function() {
+				if (member.name === group.now) {
+					return;
+				}
+				busy(TEXT.switching);
+				if (xhr && urls.switch) {
+					xhr.get(urls.switch, { sid: sid, group: group.name, name: member.name }, function(x, result) {
+						if (result && result.success) {
+							ok(TEXT.switched);
+							load();
+						} else {
+							err(TEXT.switchFail);
+						}
+					});
+				}
+			};
+			return chip;
+		}
+
+		function buildEmpty(text) {
+			var box = el('div', 'scui-empty');
+			box.appendChild(icon('inbox'));
+			box.appendChild(el('div', null, text || TEXT.emptyTitle));
+			return box;
+		}
+
+		// ---- 绘制
+		function paint() {
+			if (!mount) {
+				return;
+			}
+			mount.innerHTML = '';
+			if (!groups.length) {
+				mount.appendChild(buildEmpty(TEXT.noneFound));
+				return;
+			}
+
+			mount.appendChild(buildToolbar());
+
+			var needle = filterText.trim().toLowerCase();
+			var visible = needle ? groups.filter(function(group) {
+				return String(group.name).toLowerCase().indexOf(needle) >= 0;
+			}) : groups;
+
+			if (!visible.length) {
+				mount.appendChild(buildEmpty(TEXT.noneMatch));
+				return;
+			}
+
+			visible.forEach(function(group) {
+				mount.appendChild(buildCard(group));
+			});
+		}
+
+		// ---- 网络
+		function runDelayTest(groupName, done) {
+			if (testing || !sid) {
+				return;
+			}
+			testing = true;
+			busy(TEXT.testing);
+			xhr.get(urls.delayTest, { sid: sid, group: groupName, timeout: '5000' }, function(x, result) {
+				testing = false;
+				if (!result || !result.success) {
+					err(TEXT.testFailed);
+					if (done) { done(false); }
+					return;
+				}
+				if (done) { done(true, result.delays || {}); }
+			});
+		}
+
+		function testAll(list, btn) {
+			if (testing) {
+				return;
+			}
+			var queue = (list || []).slice();
+			var total = queue.length;
+			if (!total) {
+				return;
+			}
+			var index = 0;
+			if (btn) { btn.disabled = true; }
+
+			(function next() {
+				if (!queue.length) {
+					if (btn) { btn.disabled = false; }
+					ok();
+					load();
+					return;
+				}
+				index += 1;
+				var group = queue.shift();
+				busy(TEXT.testing + '  ' + index + ' / ' + total);
+				runDelayTest(group.name, function() {
+					window.setTimeout(next, 40);
+				});
+			})();
+		}
+
+		function load() {
+			if (!xhr || !urls.groups) {
+				return;
+			}
+			busy(TEXT.loading);
+			xhr.get(urls.groups, { sid: sid }, function(x, result) {
+				if (result && result.sid) {
+					sid = result.sid;
+				}
+				if (!result || !result.active) {
+					warn(TEXT.notActive);
+					groups = [];
+					mount.innerHTML = '';
+					mount.appendChild(buildEmpty(TEXT.notActive));
+					return;
+				}
+				testUrl = result.test_url || '';
+				testInterval = result.test_interval || '';
+				groups = result.groups || [];
+				ok();
+				paint();
+			});
+		}
+
+		return {
+			load: load,
+			setSid: function(value) { sid = value || ''; },
+			getSid: function() { return sid; },
+			status: setStatus,
+			ok: ok,
+			busy: busy,
+			warn: warn,
+			err: err,
+			reset: function() {
+				groups = [];
+				filterText = '';
+				expandedGroups = {};
+				if (mount) { mount.innerHTML = ''; }
+			}
+		};
+	}
+
+	return {
+		create: create,
+		formatDelay: formatDelay,
+		delayClass: delayClass,
+		translateName: translateName
+	};
+})();
+</script>

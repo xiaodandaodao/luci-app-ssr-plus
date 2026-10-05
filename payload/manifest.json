@@ -1,0 +1,85 @@
+{
+  "format": 1,
+  "generated_from_version": "196-r17",
+  "generated_from_commit": "d88e25f",
+  "patch": "ssrplus-smart-grouping-196-r17.patch",
+  "packages": {
+    "app": "luci-app-ssr-plus",
+    "i18n": "luci-i18n-ssr-plus-zh-cn"
+  },
+  "mtime": 1790932665,
+  "files": [
+    {
+      "target": "app",
+      "install": "usr/lib/lua/luci/controller/shadowsocksr.lua",
+      "source": "luci-app-ssr-plus/luasrc/controller/shadowsocksr.lua",
+      "new": false,
+      "mode": "0644",
+      "sha256": "6f26fdacea984ee645368b9d0ca14a91dae30c3345e6787b7940882cd4e6a2a4"
+    },
+    {
+      "target": "app",
+      "install": "usr/lib/lua/luci/model/cbi/shadowsocksr/servers.lua",
+      "source": "luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua",
+      "new": false,
+      "mode": "0644",
+      "sha256": "212d6e58338dee58d71ab07fa236bfe8cf003644a95715a7aef7f7676a50e1ee"
+    },
+    {
+      "target": "app",
+      "install": "usr/lib/lua/luci/view/shadowsocksr/clash_groups_ui.htm",
+      "source": "luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm",
+      "new": true,
+      "mode": "0644",
+      "sha256": "0ac14b354b994124f3f346b4182a74f7c65278f30fe92ebf0af2034f5ada0655"
+    },
+    {
+      "target": "app",
+      "install": "usr/lib/lua/luci/view/shadowsocksr/clash_main_panel.htm",
+      "source": "luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm",
+      "new": false,
+      "mode": "0644",
+      "sha256": "d50858247987c6e2bcb67251e1d3bcddf0edca4ca167b1c0b8b4f083a71660b0"
+    },
+    {
+      "target": "app",
+      "install": "usr/lib/lua/luci/view/shadowsocksr/clash_panel.htm",
+      "source": "luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_panel.htm",
+      "new": false,
+      "mode": "0644",
+      "sha256": "b36b694b92e4109d71757b67c972db5c789bced426cc9bc42d32fa2c73a5ff0a"
+    },
+    {
+      "target": "i18n",
+      "install": "usr/lib/lua/luci/i18n/ssr-plus.zh-cn.lmo",
+      "source": "luci-app-ssr-plus/po/zh_Hans/ssr-plus.po",
+      "new": false,
+      "mode": "0644",
+      "sha256": "3dd3af5431acc9aca5e572613da97663185592de2d46c9471cf836cc5e654956"
+    },
+    {
+      "target": "app",
+      "install": "etc/init.d/shadowsocksr",
+      "source": "luci-app-ssr-plus/root/etc/init.d/shadowsocksr",
+      "new": false,
+      "mode": "0755",
+      "sha256": "b44514d40fb09428f366f071caf5402efd7d6ba88bc447d9c8cb9ca3117beff9"
+    },
+    {
+      "target": "app",
+      "install": "usr/share/shadowsocksr/clash_yaml.lua",
+      "source": "luci-app-ssr-plus/root/usr/share/shadowsocksr/clash_yaml.lua",
+      "new": false,
+      "mode": "0644",
+      "sha256": "788bc5bedcf5f148e3aa9234c6bfa0d9303e7473b8c2a161e133eefc7408704e"
+    },
+    {
+      "target": "app",
+      "install": "usr/share/shadowsocksr/shadowsocksr.config",
+      "source": "luci-app-ssr-plus/root/usr/share/shadowsocksr/shadowsocksr.config",
+      "new": false,
+      "mode": "0644",
+      "sha256": "809f888c5e39c95c5ac38eef6ace87e1666f496354b482008149898a48c96d4b"
+    }
+  ]
+}

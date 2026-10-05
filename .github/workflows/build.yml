@@ -1,0 +1,129 @@
+name: Build luci-app-ssr-plus
+
+# 每次推到 main / 打 tag / 手动触发，都在 GitHub 上直接编译交付。
+# 产物：luci-app-ssr-plus_<ver>_all.ipk、luci-i18n-ssr-plus-zh-cn_<ver>_all.ipk、.apk
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release:
+        description: '覆盖 Makefile 里的 PKG_RELEASE（留空则用 Makefile）'
+        required: false
+        default: ''
+      enable:
+        description: '额外打开的 INCLUDE_* 选项，逗号分隔（如 INCLUDE_Mihomo）'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+env:
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    name: Build ${{ github.event_name }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            build-essential curl tar python3 python3-pip nodejs npm
+
+      - name: 准备打包工具（po2lmo / apk-static）
+        run: bash tools/deps.sh
+
+      - name: 静态校验
+        run: |
+          # Ubuntu runner 的 python 是 externally-managed，装不上就直接跳过该项校验
+          pip install --quiet luaparser 2>/dev/null \
+            || pip install --quiet --break-system-packages luaparser 2>/dev/null \
+            || echo "luaparser 装不上，verify.sh 会自动跳过该项"
+          bash tools/verify.sh
+
+      - name: 打包
+        run: |
+          set -o pipefail
+          args=(--format all --out dist)
+          [ -n "${{ github.event.inputs.release }}" ] && args+=(--release "${{ github.event.inputs.release }}")
+          [ -n "${{ github.event.inputs.enable }}" ] && args+=(--enable "${{ github.event.inputs.enable }}")
+          python3 tools/build.py "${args[@]}"
+
+      - name: 生成交付清单
+        run: |
+          {
+            echo "Tag: ${GITHUB_REF_NAME}"
+            echo "Commit: ${GITHUB_SHA}"
+            echo "Built by: GitHub Actions ${{ github.run_id }}"
+            echo
+            for f in dist/*.ipk dist/*.apk; do
+              [ -f "$f" ] || continue
+              echo "$(basename "$f")  sha256=$(sha256sum "$f" | cut -d' ' -f1)"
+            done
+          } > dist/BUILD-INFO.txt
+          cat dist/BUILD-INFO.txt
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: luci-app-ssr-plus-${{ github.run_number }}
+          path: |
+            dist/*.ipk
+            dist/*.apk
+            dist/BUILD-INFO.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: 发布 Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: luci-app-ssr-plus-*
+          merge-multiple: true
+
+      - name: 生成 Release 说明
+        run: |
+          {
+            echo "## luci-app-ssr-plus ${GITHUB_REF_NAME}"
+            echo
+            echo "基于 fw876/helloworld 上游 tag **v196.13**，附加 Smart Grouping（地区自动分组 + 自定义分组）改动。"
+            echo
+            echo "### 安装"
+            echo '```'
+            echo "opkg install luci-app-ssr-plus_${GITHUB_REF_NAME#v}_all.ipk"
+            echo '```'
+            echo
+            echo "### 产物"
+            echo "| 文件 | sha256 |"
+            echo "| --- | --- |"
+            grep 'sha256=' dist/BUILD-INFO.txt | sed 's#dist/\(.*\)  sha256=\(.*\)#| `\1` | `\2` |#'
+            echo
+            echo "构建号：${{ github.run_id }}（${{ github.sha }}）"
+            echo
+            echo "来源声明见仓库 [ATTRIBUTION.md](./ATTRIBUTION.md)。"
+          } > release_note.md
+          cat release_note.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release_note.md
+          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+          files: |
+            dist/*.ipk
+            dist/*.apk
