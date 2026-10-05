@@ -2,7 +2,8 @@
 # ---------------------------------------------------------------------------
 # deps.sh — 为 build.py 准备两个外部二进制：
 #   1) tools/po2lmo   : 把 po/ 里的 .po 编译成 LuCI 的 .lmo（Apache-2.0，openwrt/luci）
-#   2) tools/apk      : apk-tools 静态二进制（apk-static），用于产出 .apk
+#   2) tools/apk      : apk-tools 3.0.0（优先 Linux 源码 meson 编译；兜底 alpine apk-static）
+#                       版本固定 3.0.0，因为只有 3.x 的 mkpkg 才产出 APK v3 格式。
 #
 # 两者都按本机架构获取；已存在且可执行的直接跳过（幂等，可重复跑）。
 # 用法：  ./tools/deps.sh        （跑在仓库根）
@@ -46,14 +47,6 @@ prepare_po2lmo() {
     || die "下载 lmo.h 失败"
   cp "$REPO/tools/sfh_hash.c" "$tmp/sfh_hash.c" || die "缺少 tools/sfh_hash.c"
 
-  # 收集候选 lua 头文件目录（Debian/Ubuntu 的 /usr/include/luaX.Y，Homebrew 的 Cellar 路径）
-  local hp; hp="$(command -v brew >/dev/null 2>&1 && brew --prefix 2>/dev/null || true)"
-  local cands=( /usr/include/lua5.1 /usr/include/lua5.3 /usr/include/lua5.4 /usr/include/lua
-                /usr/local/include )
-  if [ -n "$hp" ]; then
-    cands+=( $(ls -d "$hp"/Cellar/lua/*/include/lua* 2>/dev/null) )
-  fi
-
   local probe="$tmp/probe.c"
   cat > "$probe" <<'EOF'
 #include <lua.h>
@@ -62,30 +55,57 @@ prepare_po2lmo() {
 int main(void) { lua_State *l = luaL_newstate(); luaL_openlibs(l); lua_close(l); return 0; }
 EOF
 
-  local hdr="" libname="" libdir=""
-  local d
-  for d in "${cands[@]}"; do
-    [ -f "$d/lua.h" ] || continue
-    local bn; bn="$(basename "$d")"
-    local n; n="${bn#lua}"          # lua5.4 -> 5.4, lua -> (空)
-    case "$bn" in
-      lua5.*) libname="lua$bn" ;;
-      lua)    libname="lua" ;;
-      *)      continue ;;
-    esac
-    local candlib
-    candlib="$(dirname "$(dirname "$d")")/lib"        # .../include/lua5.4 -> .../lib
-    [ -d "$candlib" ] || candlib="/usr/lib/$(cc -dumpmachine 2>/dev/null)"
-    if cc -O2 -I"$d" -L"$candlib" -l"$libname" -o "$tmp/probe.bin" "$probe" -lm >/dev/null 2>&1; then
-      hdr="$d"; libdir="$candlib"; break
+  # 找一组真的能用的 lua 编译/链接参数。判定标准只有一条：能否编译并链接这个探针，
+  # 不去猜头文件目录名与库名的对应关系（Ubuntu 的 /usr/include/lua5.4 对应 -llua5.4，
+  # 而 Homebrew 的 .../include/lua 对应 -llua，两套命名规则完全不同）。
+  local lua_flags="" lua_how=""
+  local pc cf lf
+  if command -v pkg-config >/dev/null 2>&1; then
+    for pc in lua5.4 lua5.3 lua5.1 lua; do
+      pkg-config --exists "$pc" 2>/dev/null || continue
+      cf="$(pkg-config --cflags "$pc" 2>/dev/null)"
+      lf="$(pkg-config --libs "$pc" 2>/dev/null)"
+      # 故意不加引号：这里需要按空格拆成多个参数
+      if cc -O2 -o "$tmp/probe.bin" "$probe" $cf $lf -lm >/dev/null 2>&1; then
+        lua_flags="$cf $lf"; lua_how="pkg-config $pc"; break
+      fi
+    done
+  fi
+
+  if [ -z "$lua_flags" ]; then
+    local hp; hp="$(command -v brew >/dev/null 2>&1 && brew --prefix 2>/dev/null || true)"
+    local d bn libname libdir
+    local cands=( /usr/include/lua5.4 /usr/include/lua5.3 /usr/include/lua5.1 /usr/include/lua
+                  /usr/local/include )
+    if [ -n "$hp" ]; then
+      cands+=( $(ls -d "$hp"/Cellar/lua/*/include/lua "$hp"/Cellar/lua/*/include/lua5.* \
+                      "$hp"/opt/lua/include/lua "$hp"/opt/lua/include/lua5.* 2>/dev/null) )
+      cands+=( "$hp/include" )
     fi
-  done
-  [ -n "$hdr" ] || die "找不到可用的 lua 开发库，请先安装：apt install liblua5.4-dev / brew install lua@5.1"
-  info "使用 lua：${hdr}（库 ${libname}，在 ${libdir}）"
+    for d in "${cands[@]}"; do
+      [ -f "$d/lua.h" ] || continue
+      bn="$(basename "$d")"
+      case "$bn" in
+        lua5.*)  libname="$bn" ;;        # /usr/include/lua5.4 -> -llua5.4
+        lua|include) libname="lua" ;;    # .../include/lua、/usr/local/include -> -llua
+        *)       continue ;;
+      esac
+      for libdir in "$(dirname "$d")/lib" "$(dirname "$(dirname "$d")")/lib" "$hp/lib" /usr/lib; do
+        [ -d "$libdir" ] || continue
+        if cc -O2 -I"$d" -L"$libdir" -o "$tmp/probe.bin" "$probe" -l"$libname" -lm >/dev/null 2>&1; then
+          lua_flags="-I$d -L$libdir -l$libname"; lua_how="$d"; break
+        fi
+      done
+      [ -n "$lua_flags" ] && break
+    done
+  fi
+
+  [ -n "$lua_flags" ] || die "找不到可用的 lua 开发库，请先安装：apt install liblua5.4-dev pkg-config / brew install lua"
+  info "lua 开发库就绪（${lua_how}）"
 
   info "编译 po2lmo ..."
-  ( cd "$tmp" && cc -O2 -I"$hdr" -I"$tmp/lib" -L"$libdir" -o po2lmo po2lmo.c sfh_hash.c -l"$libname" -lm ) \
-    || die "编译 po2lmo 失败（lua 版本不兼容？换 liblua5.1-dev 再试）"
+  ( cd "$tmp" && cc -O2 -I"$tmp/lib" -o po2lmo po2lmo.c sfh_hash.c $lua_flags -lm ) \
+    || die "编译 po2lmo 失败（lua 版本不兼容？换 liblua5.1-0-dev 再试）"
   mv "$tmp/po2lmo" "$TOOLS/po2lmo"
   chmod +x "$TOOLS/po2lmo"
   rm -rf "$tmp"
@@ -127,6 +147,9 @@ build_apk_from_source() {
   tar -xzf "$tmp/apk-tools.tar.gz" -C "$tmp" || { warn "解包失败"; rm -rf "$tmp"; return 1; }
 
   local src="$tmp/apk-tools-v${APK_TOOLS_VER}"
+  [ -d "$src" ] || { warn "解包后没找到 $src"; rm -rf "$tmp"; return 1; }
+  # tarball 偶尔会丢可执行位，而 meson 要 run_command('./get-version.sh')
+  chmod +x "$src/get-version.sh" 2>/dev/null
   info "编译 apk-tools（meson + ninja，约 30 秒）..."
   if ! ( cd "$src" && meson setup build --prefix=/usr >/dev/null && ninja -C build >/dev/null ) 2>"$tmp/build.log"; then
     warn "apk-tools 编译失败，日志尾部："; tail -5 "$tmp/build.log" >&2

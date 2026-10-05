@@ -36,17 +36,21 @@ jobs:
       - name: 安装系统依赖
         run: |
           sudo apt-get update -qq
+          # liblua5.4-dev + pkg-config : 编译 po2lmo
+          # meson/ninja + zlib/openssl : 从源码编译 apk-tools 3.0.0（产出 APK v3）
           sudo apt-get install -y -qq --no-install-recommends \
-            build-essential curl tar python3 python3-pip nodejs npm
+            build-essential pkg-config curl tar python3 python3-pip nodejs npm \
+            liblua5.4-dev meson ninja-build \
+            zlib1g-dev libssl-dev libzstd-dev
 
-      - name: 准备打包工具（po2lmo / apk-static）
+      - name: 准备打包工具（po2lmo / apk）
         run: bash tools/deps.sh
 
       - name: 静态校验
         run: |
           # Ubuntu runner 的 python 是 externally-managed，装不上就直接跳过该项校验
-          pip install --quiet luaparser 2>/dev/null \
-            || pip install --quiet --break-system-packages luaparser 2>/dev/null \
+          python3 -m pip install --quiet luaparser 2>/dev/null \
+            || python3 -m pip install --quiet --break-system-packages luaparser 2>/dev/null \
             || echo "luaparser 装不上，verify.sh 会自动跳过该项"
           bash tools/verify.sh
 
