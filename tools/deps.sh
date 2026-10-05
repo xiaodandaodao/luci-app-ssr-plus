@@ -114,6 +114,8 @@ EOF
 
 # ---------------------------------------------------------------------------
 # 2) apk（必须 3.x —— 只有 3.x 的 mkpkg 产出 APK v3 格式）
+#    首选 alpine 的 apk-tools-static 3.x（自包含静态二进制），
+#    兜底 Linux 上源码编译（须 -Ddefault_library=static，见下）。
 # ---------------------------------------------------------------------------
 apk_arch() {
   case "$(uname -m)" in
@@ -157,16 +159,23 @@ build_apk_from_source() {
   # tarball 偶尔会丢可执行位，而 meson 要 run_command('./get-version.sh')
   chmod +x "$src/get-version.sh" 2>/dev/null
   info "编译 apk-tools（meson + ninja，约 30 秒）..."
-  if ! ( cd "$src" && meson setup build --prefix=/usr >/dev/null && ninja -C build >/dev/null ) 2>"$tmp/build.log"; then
+  # 必须 -Ddefault_library=static：否则 apk 会动态依赖 libapk.so.3.0.0，
+  # 而那个 .so 只存在于构建目录，单拷 apk 二进制到别处会 "cannot open shared object file"
+  if ! ( cd "$src" && meson setup build --prefix=/usr -Ddefault_library=static >/dev/null \
+         && ninja -C build >/dev/null ) 2>"$tmp/build.log"; then
     warn "apk-tools 编译失败，日志尾部："; tail -5 "$tmp/build.log" >&2
     rm -rf "$tmp"; return 1
   fi
 
   local bin="$src/build/src/apk"
   [ -x "$bin" ] || { warn "没找到编译产物 $bin"; rm -rf "$tmp"; return 1; }
+  if ldd "$bin" 2>/dev/null | grep -q libapk; then
+    warn "编译出来的 apk 仍动态依赖 libapk，无法独立分发（-Ddefault_library=static 没生效）"
+    rm -rf "$tmp"; return 1
+  fi
   cp "$bin" "$TOOLS/apk" && chmod +x "$TOOLS/apk"
   rm -rf "$tmp"
-  info "apk-tools ${APK_TOOLS_VER} -> $TOOLS/apk（自编译）"
+  info "apk-tools ${APK_TOOLS_VER} -> $TOOLS/apk（自编译，静态链接 libapk）"
   return 0
 }
 
@@ -239,8 +248,10 @@ prepare_apk() {
     info "apk 已存在，跳过"
     return 0
   fi
-  build_apk_from_source && return 0
+  # 首选 alpine 现成的静态二进制：自包含、无需编译工具、每次结果一致
   fetch_apk_static && return 0
+  # 兜底：本机编译（需要 meson/ninja + openssl/zlib 开发库）
+  build_apk_from_source && return 0
   warn "拿不到 apk 工具，本次只会产出 .ipk（要 apk 请装 meson/ninja 或手工放 $TOOLS/apk）"
   return 0
 }
