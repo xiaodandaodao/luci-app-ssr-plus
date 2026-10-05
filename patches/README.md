@@ -9,10 +9,10 @@
 
 | 路线 | 适用场景 | 需要什么 |
 |---|---|---|
-| **A. 源码补丁** `ssrplus-smart-grouping-196-r17.patch` | 能拿到 helloworld 源码 | 源码树 + 打包环境 |
+| **A. 源码补丁** `ssrplus-local-changes.patch` | 能拿到 helloworld 源码 | 源码树 + 打包环境 |
 | **B. 注入预编译包** `../payload/` + `../tools/inject_pkg.py` | **拿不到源码**（别人发布的闭源/预编译 ipk、apk） | 只要那个包本身 |
 
-两条路线产出的包，内容与从本项目源码直接构建的 `196-r17` **完全一致**（见下文验证）。
+两条路线产出的包，内容与从本项目源码直接构建的 `196-r1301` **完全一致**（见下文验证）。
 
 ---
 
@@ -23,8 +23,8 @@
 
 ```bash
 cd /path/to/helloworld
-git apply /path/to/ssrplus-smart-grouping-196-r17.patch     # 或：
-patch -p1 < /path/to/ssrplus-smart-grouping-196-r17.patch   # 没有 git 也能用
+git apply /path/to/ssrplus-local-changes.patch     # 或：
+patch -p1 < /path/to/ssrplus-local-changes.patch   # 没有 git 也能用
 ```
 
 两种方式都已实测干净通过（无 reject、新文件正常创建）。
@@ -51,9 +51,9 @@ cd /path/to/ssrplus-local-build
 | `root/etc/init.d/shadowsocksr` | 启动日志补充分组统计 |
 | `root/usr/share/shadowsocksr/shadowsocksr.config` | 新增选项的默认值 |
 | `po/zh_Hans/ssr-plus.po` | 新增文案的中文翻译 |
-| `Makefile` | `PKG_RELEASE` → 17 |
+| `Makefile` | `PKG_RELEASE` → `1301` |
 
-> 补丁的目标是「把上游 v196.13 变成 r17」，所以除了本次的分组功能，也一并带上了
+> 补丁的目标是「把上游 v196.13 变成 1301」，所以除了本次的分组功能，也一并带上了
 > 早先的 url-test 自动选节点与延迟可视化改动 —— 这些本来就是本项目相对上游的全部差异。
 
 ### 换到别的上游版本
@@ -77,7 +77,7 @@ cd /path/to/ssrplus-local-build
 cd ssrplus-local-build
 python3 tools/inject_pkg.py make-payload \
     --src  /path/to/helloworld \
-    --patch patches/ssrplus-smart-grouping-196-r17.patch \
+    --patch patches/ssrplus-local-changes.patch \
     --out  payload/
 ```
 
@@ -88,7 +88,7 @@ python3 tools/inject_pkg.py make-payload \
 想先看看会改哪些文件：
 
 ```bash
-python3 tools/inject_pkg.py show --patch patches/ssrplus-smart-grouping-196-r17.patch
+python3 tools/inject_pkg.py show --patch patches/ssrplus-local-changes.patch
 ```
 
 ### 2. 注入到别人的包
@@ -160,7 +160,7 @@ apk 的版本号语法实测很严：`+sg` / `~sg` / `.sg1` / `-sg` 全部被 `a
 * `git apply --check` / `patch -p1 --dry-run` 均干净通过
 * 打完补丁的树与当前工作树**逐文件 sha 完全一致**（整树递归 diff 为空）
 * 从打补丁的树构建：ipk `758cf2eb…`、apk `ffce796c…`、语言包 apk `076ab7fa…`
-  —— 与直接构建的 `196-r17` **字节完全相同**
+  —— 与直接构建的 `196-r1301` **字节完全相同**
 * 语言包内的 `ssr-plus.zh-cn.lmo` sha `3dd3af54…` 三方一致
 
 **路线 B**（对 `196-r13` 基线包注入）
@@ -168,13 +168,13 @@ apk 的版本号语法实测很严：`+sg` / `~sg` / `.sg1` / `-sg` 全部被 `a
 | 比对 | 结果 |
 |---|---|
 | 注入后 ipk vs 基线 ipk | 差异 **8 项** = 7 个替换 + 1 个新增，其余文件一字未动 |
-| 注入后 ipk vs r17 ipk | **0 差异** |
+| 注入后 ipk vs r1301 ipk | **0 差异** |
 | 注入后 apk vs 基线 apk | 差异 **8 项** |
-| 注入后 apk vs r17 apk | **0 差异** |
+| 注入后 apk vs r1301 apk | **0 差异** |
 | apk 元数据 | name / arch / license / origin / maintainer / url / depends(16) / provides 全部保留 |
 | 语言包（ipk + apk） | 注入后 `.lmo` sha 与 payload 一致 |
 
-即：注入出来的包，文件树与从源码编译的 `196-r17` 一模一样。
+即：注入出来的包，文件树与从源码编译的 `196-r1301` 一模一样。
 
 **未验证**：没有在真实路由器上 `opkg install` / `apk add` 跑过，也没有真机开启过新开关。
 装机建议先备份 `/etc/config/shadowsocksr`。
@@ -188,7 +188,7 @@ apk 的版本号语法实测很严：`+sg` / `~sg` / `.sg1` / `-sg` 全部被 `a
 
 ```sh
 cd /path/to/helloworld
-git apply --3way patches/ssrplus-smart-grouping-196-r17.patch
+git apply --3way patches/ssrplus-local-changes.patch
 ```
 
 而**本仓库根目录就是那个 `luci-app-ssr-plus/` 目录**（包被提升为仓库根），所以在这里应用要
@@ -196,7 +196,7 @@ git apply --3way patches/ssrplus-smart-grouping-196-r17.patch
 
 ```sh
 # 在本仓库根目录执行
-git apply -p2 patches/ssrplus-smart-grouping-196-r17.patch   # 或 patch -p2 < ...
+git apply -p2 patches/ssrplus-local-changes.patch   # 或 patch -p2 < ...
 ```
 
 只是要「看改了什么」的话直接 `git diff --stat` 不方便（改动已在工作树里），建议读

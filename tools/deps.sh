@@ -125,7 +125,7 @@ apk_arch() {
   esac
 }
 
-# apk-tools 版本固定 —— 必须与本地产出 196-r17 时用的 3.0.0 一致，
+# apk-tools 版本固定 —— 必须与「产出 APK v3 格式」所需的 3.0.0 一致，
 # 否则 mkpkg 生成的包格式（APK v3）可能变。
 APK_TOOLS_VER="3.0.0"
 

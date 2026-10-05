@@ -10,6 +10,10 @@
 #     2) 用 git apply -p2 剥掉 luci-app-ssr-plus/ 这一层，落到本仓库根
 #     3) 和我们改过的文件走三方合并，只有真正同行冲突才停下
 #
+# 版本号策略（PKG_RELEASE）—— 与上游 tag 一一对应，所以冲突时永远取我们的：
+#   <上游 release><两位本方修订序>：上游 r13 的第 1 版 = 1301，第 2 版 = 1302；
+#   上游升到 r14 则重新从 1401 起。必须是纯数字（apk 的 "-r" 后只接受整数）。
+#
 # 用法：
 #   bash tools/sync-upstream.sh --status          查看当前基线与已拉取的上游 tag
 #   bash tools/sync-upstream.sh v196.20           同步到上游 v196.20
@@ -148,7 +152,8 @@ cmd_sync() {
     cat <<'TIPS'
   · 上游的 bug 修复 / 新功能        → 采纳上游
   · 我们的改造（见 ATTRIBUTION.md §2）→ 保留我们
-  · Makefile 的 PKG_RELEASE          → 永远用我们的（版本号由我们自己排）
+  · Makefile 的 PKG_RELEASE          → 永远用我们的。规则 <上游 release><两位本方修订序>
+                                       （上游 r13 第 1 版 = 1301；升到 r14 → 1401）
 TIPS
     printf '\n%s\n' "${B}下一步${N}"
     cat <<TIPS
@@ -189,7 +194,7 @@ cmd_regen() {
 
   printf '%s\n' "$new" > "$BASE_FILE"
   info "基线推进为 ${new}（写入 ${BASE_FILE}）"
-  dim "  提示：旧的 patches/ssrplus-smart-grouping-*.patch 已被这份取代，可以删掉。"
+  dim "  提示：补丁路径固定为 ${PATCH_OUT}，不再随版本改名。"
   dim "  别忘了同步刷新注入载荷：python3 tools/inject_pkg.py make-payload"
 }
 

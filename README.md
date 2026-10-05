@@ -22,11 +22,11 @@
 
 ```sh
 # opkg（传统 ipk 固件）
-opkg install luci-app-ssr-plus_196-r17_all.ipk
-opkg install luci-i18n-ssr-plus-zh-cn_196-r17_all.ipk
+opkg install luci-app-ssr-plus_196-r1301_all.ipk
+opkg install luci-i18n-ssr-plus-zh-cn_196-r1301_all.ipk
 
 # apk（apk-tools v3 固件，如 OpenWrt 24.10+ / ImmortalWrt）
-apk add --allow-untrusted ./luci-app-ssr-plus-196-r17.apk
+apk add --allow-untrusted ./luci-app-ssr-plus-196-r1301.apk
 ```
 
 装完刷新 LuCI 页面即可。功能开关默认是关的，在「服务 → ShadowSocksR Plus+ → 服务器」里打开。
@@ -46,7 +46,7 @@ apk add --allow-untrusted ./luci-app-ssr-plus-196-r17.apk
 单个 job 约 1–2 分钟（只编纯脚本包，不需要 SDK）。发布新版本：
 
 ```sh
-git tag v196.13-r18 && git push origin v196.13-r18
+git tag v196-r1302 && git push origin v196-r1302
 ```
 
 ### 本地构建
@@ -57,7 +57,7 @@ git tag v196.13-r18 && git push origin v196.13-r18
 bash tools/deps.sh            # 生成 tools/po2lmo 与 tools/apk（自动按本机架构）
 python3 tools/build.py        # 默认从本仓库根打包，产物在 out/
 python3 tools/build.py --format ipk          # 只出 ipk
-python3 tools/build.py --release r18         # 覆盖 PKG_RELEASE
+python3 tools/build.py --release 1302        # 覆盖 PKG_RELEASE
 python3 tools/build.py --enable INCLUDE_Mihomo,INCLUDE_ChinaDNS_NG
 
 bash tools/verify.sh          # 静态校验：Lua / shell / PO / htm 模板 / jsdom 冒烟
@@ -99,7 +99,22 @@ bash tools/sync-upstream.sh v196.20      # 同步到上游某个 tag
 |---|---|
 | 上游的 bug 修复 / 新功能 | 采纳上游 |
 | 我们的改造（清单见 [ATTRIBUTION.md](./ATTRIBUTION.md) §2） | 保留我们 |
-| `Makefile` 里的 `PKG_VERSION` / `PKG_RELEASE` | 永远用我们的（版本号由我们自己排） |
+| `Makefile` 里的 `PKG_VERSION` / `PKG_RELEASE` | 永远用我们的（规则见下） |
+
+### 版本号规则
+
+`PKG_RELEASE` 编码为 **`<上游 release><两位本方修订序>`**，与上游 tag 一一对应：
+
+| 情况 | 值 |
+|---|---|
+| 上游 `v196.13` 的第 1 版（当前） | `1301` |
+| 同一上游基线上的第 2 次修订 | `1302` |
+| 上游升到 `v196.14` 后的第 1 版 | `1401` |
+
+之所以必须是**纯数字**：apk 的版本号是 `<PKG_VERSION>-r<PKG_RELEASE>`，`-r` 后面只接受整数。
+`RE13` / `196R-r13` / `196-r13.1` 这类写法会被 `apk mkpkg` 直接拒绝（实测 `package version is invalid`），
+只有「单字母后缀」`196a-r13` 和「纯数字 revision」可行。数字编码同时保证数值单调递增，
+`opkg` / `apk` 都会判定为新版（`1301 > 17 > 13`），旧的 `196-r17` 也能正常升级上来。
 
 合并完、跑过校验和构建之后，**必须重生成补丁并推进基线**：
 

@@ -2,7 +2,7 @@
   "format": 1,
   "generated_from_version": "196-r17",
   "generated_from_commit": "d88e25f",
-  "patch": "ssrplus-smart-grouping-196-r17.patch",
+  "patch": "ssrplus-local-changes.patch",
   "packages": {
     "app": "luci-app-ssr-plus",
     "i18n": "luci-i18n-ssr-plus-zh-cn"

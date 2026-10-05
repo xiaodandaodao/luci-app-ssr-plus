@@ -7,7 +7,7 @@ index 7fc8c9b..c658c29 100644
  PKG_NAME:=luci-app-ssr-plus
  PKG_VERSION:=196
 -PKG_RELEASE:=13
-+PKG_RELEASE:=17
++PKG_RELEASE:=1301
  
  PKG_CONFIG_DEPENDS:= \
  	CONFIG_PACKAGE_$(PKG_NAME)_Iptables_Transparent_Proxy \

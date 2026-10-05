@@ -11,7 +11,7 @@
 | 上游仓库 | `https://github.com/fw876/helloworld` |
 | 基线 tag | **v196.13** |
 | 基线 commit | `d88e25f`（xray-core: enable UPX best compression by default） |
-| 包版本 | `luci-app-ssr-plus` `196-r17`（上游 v196.13 为 `196-r13`） |
+| 包版本 | `luci-app-ssr-plus` `196-r1301`（上游 v196.13 为 `196-r13`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r13 的第 1 版」= `1301` |
 | 许可证 | GPL-3.0（随仓库保留上游 `LICENSE` 原文，未改动） |
 
 上游 monorepo 里 `luci-app-ssr-plus/` 是一个子目录，本仓库把它**提升为仓库根**：
@@ -27,7 +27,7 @@
 
 ## 2. 相对上游的功能改动（10 个文件）
 
-对应 `patches/ssrplus-smart-grouping-196-r17.patch`，三批改动：
+对应 `patches/ssrplus-local-changes.patch`，三批改动：
 
 ### ① 面板延迟可视化
 
@@ -57,7 +57,7 @@
 | `root/etc/init.d/shadowsocksr` | `prepare_clash_runtime_config()` 中调用 + 日志 |
 | `root/usr/share/shadowsocksr/shadowsocksr.config` | 新增选项默认值 |
 | `po/zh_Hans/ssr-plus.po` | 新增文案翻译 |
-| `Makefile` | `PKG_RELEASE` `16` → `r17` |
+| `Makefile` | `PKG_RELEASE` `16` → `1301`（编码规则见 §1） |
 
 > 上游 `po/zh-cn/` 目录（同内容、旧命名）未同步改动，属已知差异，不影响 lmo 生成（本仓库用 `po/zh_Hans/`）。
 

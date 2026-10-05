@@ -20,11 +20,11 @@ ipk / apk 里，从而在一个**没有源码**的预编译包上获得这些功
   # 1) 生成 payload（一次性）
   python3 tools/inject_pkg.py make-payload \\
       --src  /path/to/helloworld \\
-      --patch patches/ssrplus-smart-grouping-196-r17.patch \\
+      --patch patches/ssrplus-local-changes.patch \\
       --out   payload/
 
   # 2) 看看会改哪些文件
-  python3 tools/inject_pkg.py show --patch patches/ssrplus-smart-grouping-196-r17.patch
+  python3 tools/inject_pkg.py show --patch patches/ssrplus-local-changes.patch
 
   # 3) 注入
   python3 tools/inject_pkg.py apply --payload payload/ \\
