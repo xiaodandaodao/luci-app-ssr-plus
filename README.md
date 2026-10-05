@@ -72,20 +72,46 @@ helloworld 这类 monorepo 根（会自动找 `<root>/luci-app-ssr-plus`）。
 ```
 Makefile  luasrc/  po/  root/     # 包本体（= 上游 luci-app-ssr-plus，含上述改动）
 tools/                            # 打包与校验工具链（build.py / deps.sh / verify.sh / …）
-patches/                          # 相对上游 v196.13 的统一 diff + 移植说明
+patches/                          # 相对上游基线的统一 diff + 移植说明
 payload/                          # 无源码注入载荷（给别人打到自己预编译的包上）
+.upstream-base                    # 我们当前对齐的上游 tag（同步流程用）
 .github/workflows/build.yml       # CI：校验 → 打包 → Artifact / Release
 ```
 
 ## 同步上游
 
-改动集中在 10 个文件（清单见 [ATTRIBUTION.md](./ATTRIBUTION.md) §2）。上游更新后：
+本仓库的**根目录**就是上游的 `luci-app-ssr-plus/` 子目录（再叠加我们的改造）。
+所以「同步」= 把上游新版本对这个子目录的改动搬进本仓库，而不是把我们的补丁打到上游去。
+两边历史无关、目录还差一层，直接 `git merge` 会炸成一片冲突，因此改用差分重放：
 
-1. `cd ../helloworld && git fetch && git checkout <新 tag>`
-2. `git apply --3way patches/ssrplus-smart-grouping-196-r17.patch`；冲突就按清单手工重放
-   （改动集中在 `clash_yaml.lua` 的 `merge()` 末尾与新增函数，冲突通常很小）
-3. 把改动同步进本仓库 → 跑 `bash tools/verify.sh` → **重新生成补丁**（不重新生成就等于没留档）
-4. 需要移植到别人的预编译包时，用 `tools/inject_pkg.py`（见 `patches/README.md` 路线 B）
+```sh
+bash tools/sync-upstream.sh --status     # 看当前基线 + 已拉取的上游 tag
+bash tools/sync-upstream.sh v196.20      # 同步到上游某个 tag
+```
+
+脚本会：把上游 tag 拉进 `refs/upstream-tags/`（不污染本仓库自己的 `v*` tag）→ 生成
+「基线 tag → 新 tag」对本包的差分 → `git apply -p2` 剥掉目录层落到仓库根 →
+和我们改过的文件走三方合并。**只有真正同行冲突才停下**，并打印裁决原则与后续步骤。
+
+冲突时的判断准则：
+
+| 情况 | 怎么做 |
+|---|---|
+| 上游的 bug 修复 / 新功能 | 采纳上游 |
+| 我们的改造（清单见 [ATTRIBUTION.md](./ATTRIBUTION.md) §2） | 保留我们 |
+| `Makefile` 里的 `PKG_VERSION` / `PKG_RELEASE` | 永远用我们的（版本号由我们自己排） |
+
+合并完、跑过校验和构建之后，**必须重生成补丁并推进基线**：
+
+```sh
+bash tools/sync-upstream.sh --regen-patch v196.20
+```
+
+它把「我们相对新上游的全部差异」写进 `patches/ssrplus-local-changes.patch`，
+并把新基线写进 `.upstream-base`。不重生成就等于没留档，下次同步会失去依据。
+
+需要移植到别人的预编译包（拿不到源码）时，走 `tools/inject_pkg.py`，
+见 [patches/README.md](./patches/README.md) 路线 B。
 
 ## 致谢与声明
 
