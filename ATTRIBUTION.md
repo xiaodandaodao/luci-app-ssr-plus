@@ -9,9 +9,9 @@
 | 项目 | 值 |
 |---|---|
 | 上游仓库 | `https://github.com/fw876/helloworld` |
-| 基线 tag | **v196.13** |
-| 基线 commit | `d88e25f`（xray-core: enable UPX best compression by default） |
-| 包版本 | `luci-app-ssr-plus` `196-r1301`（上游 v196.13 为 `196-r13`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r13 的第 1 版」= `1301` |
+| 基线 tag | **v196.14** |
+| 基线 commit | `99a83b4`（mihomo: enable UPX best compression by default） |
+| 包版本 | `luci-app-ssr-plus` `196-r1401`（上游 v196.14 为 `196-r14`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r14 的第 1 版」= `1401` |
 | 许可证 | GPL-3.0（随仓库保留上游 `LICENSE` 原文，未改动） |
 
 上游 monorepo 里 `luci-app-ssr-plus/` 是一个子目录，本仓库把它**提升为仓库根**：
@@ -57,7 +57,7 @@
 | `root/etc/init.d/shadowsocksr` | `prepare_clash_runtime_config()` 中调用 + 日志 |
 | `root/usr/share/shadowsocksr/shadowsocksr.config` | 新增选项默认值 |
 | `po/zh_Hans/ssr-plus.po` | 新增文案翻译 |
-| `Makefile` | `PKG_RELEASE` `16` → `1301`（编码规则见 §1） |
+| `Makefile` | `PKG_RELEASE` `16` → `1401`（编码规则见 §1） |
 
 > 上游 `po/zh-cn/` 目录（同内容、旧命名）未同步改动，属已知差异，不影响 lmo 生成（本仓库用 `po/zh_Hans/`）。
 
@@ -73,7 +73,7 @@
 | `tools/build_preview.py` | 把面板模板渲染成可离线打开的预览页（含明暗主题） | 本项目自研 |
 | `tools/smoke_test.js` | jsdom 无头冒烟测试（25 项断言，可抓 `node --check` 抓不到的 TEXT 漏键 → 按钮显示 `undefined` 之类） | 本项目自研 |
 | `tools/inject_pkg.py` | 无源码注入工具：把改动注入别人预编译的 ipk/apk（`make-payload` / `show` / `apply`） | 本项目自研 |
-| `patches/` | 相对上游 v196.13 的统一 diff + 移植说明 | 本项目自研 |
+| `patches/` | 相对上游 v196.14 的统一 diff + 移植说明 | 本项目自研 |
 | `payload/` | 注入载荷（9 个文件 + manifest.json），接收方无需源码 | 本项目自研 |
 
 ## 4. 构建期下载的第三方二进制（不入库）

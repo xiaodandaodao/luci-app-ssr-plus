@@ -1,20 +1,24 @@
-diff --git a/luci-app-ssr-plus/Makefile b/luci-app-ssr-plus/Makefile
-index 7fc8c9b..c658c29 100644
---- a/luci-app-ssr-plus/Makefile
-+++ b/luci-app-ssr-plus/Makefile
-@@ -4,7 +4,7 @@ LUCI_TITLE:=luci-app-ssr-plus
+diff --git a/Makefile b/Makefile
+index c7941e9..4c40503 100644
+--- a/Makefile
++++ b/Makefile
+@@ -4,7 +4,11 @@ LUCI_TITLE:=luci-app-ssr-plus
  LUCI_PKGARCH:=all
  PKG_NAME:=luci-app-ssr-plus
  PKG_VERSION:=196
--PKG_RELEASE:=13
-+PKG_RELEASE:=1301
+-PKG_RELEASE:=14
++# PKG_RELEASE 编码规则：<上游 release><两位本方修订序>
++#   上游 v196.14 的第 1 版 = 1401，第 2 版 = 1402；上游升到 r15 则重新从 1501 起。
++#   必须是纯数字且单调递增 —— apk 的 "-r" 后只接受整数（RE13 这类写法会被 mkpkg 拒绝），
++#   数字编码同时保证 opkg/apk 都会把它判定为「比旧版新」的升级。
++PKG_RELEASE:=1401
  
  PKG_CONFIG_DEPENDS:= \
  	CONFIG_PACKAGE_$(PKG_NAME)_Iptables_Transparent_Proxy \
-diff --git a/luci-app-ssr-plus/luasrc/controller/shadowsocksr.lua b/luci-app-ssr-plus/luasrc/controller/shadowsocksr.lua
+diff --git a/luasrc/controller/shadowsocksr.lua b/luasrc/controller/shadowsocksr.lua
 index 6a5a01b..6e573e5 100644
---- a/luci-app-ssr-plus/luasrc/controller/shadowsocksr.lua
-+++ b/luci-app-ssr-plus/luasrc/controller/shadowsocksr.lua
+--- a/luasrc/controller/shadowsocksr.lua
++++ b/luasrc/controller/shadowsocksr.lua
 @@ -463,14 +463,23 @@ local function resolve_active_clash_sid(sid)
  	return nil
  end
@@ -445,10 +449,10 @@ index 6a5a01b..6e573e5 100644
  	})
  end
  
-diff --git a/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua b/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua
+diff --git a/luasrc/model/cbi/shadowsocksr/servers.lua b/luasrc/model/cbi/shadowsocksr/servers.lua
 index e7b13fa..ff4f4f7 100644
---- a/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua
-+++ b/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua
+--- a/luasrc/model/cbi/shadowsocksr/servers.lua
++++ b/luasrc/model/cbi/shadowsocksr/servers.lua
 @@ -587,6 +587,53 @@ if has_mihomo then
  	o:value("https://gist.githubusercontent.com/vernesong/4c27ed54ab2a5fedd9c4011389ac11ed/raw/lhie1_clash.ini", "lhie1")
  	o.rmempty = true
@@ -503,11 +507,11 @@ index e7b13fa..ff4f4f7 100644
  end
  
  s:append(cbi.Template("shadowsocksr/subscribe_schedule_compact"))
-diff --git a/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm b/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm
+diff --git a/luasrc/view/shadowsocksr/clash_groups_ui.htm b/luasrc/view/shadowsocksr/clash_groups_ui.htm
 new file mode 100644
 index 0000000..c8ae450
 --- /dev/null
-+++ b/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm
++++ b/luasrc/view/shadowsocksr/clash_groups_ui.htm
 @@ -0,0 +1,1850 @@
 +<%
 +-- ============================================================================
@@ -2359,10 +2363,10 @@ index 0000000..c8ae450
 +	};
 +})();
 +</script>
-diff --git a/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm b/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm
+diff --git a/luasrc/view/shadowsocksr/clash_main_panel.htm b/luasrc/view/shadowsocksr/clash_main_panel.htm
 index 9a0f845..ccea51b 100644
---- a/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm
-+++ b/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm
+--- a/luasrc/view/shadowsocksr/clash_main_panel.htm
++++ b/luasrc/view/shadowsocksr/clash_main_panel.htm
 @@ -4,1124 +4,818 @@ local clash_nodes = self.clash_nodes or {}
  local current_sid = self.map:get(section, "global_server") or "nil"
  -%>
@@ -4197,10 +4201,10 @@ index 9a0f845..ccea51b 100644
 +})();
 +</script>
  <%+cbi/valuefooter%>
-diff --git a/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_panel.htm b/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_panel.htm
+diff --git a/luasrc/view/shadowsocksr/clash_panel.htm b/luasrc/view/shadowsocksr/clash_panel.htm
 index 9d5cb76..b8f5e6f 100644
---- a/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_panel.htm
-+++ b/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_panel.htm
+--- a/luasrc/view/shadowsocksr/clash_panel.htm
++++ b/luasrc/view/shadowsocksr/clash_panel.htm
 @@ -1,102 +1,42 @@
  <%+header%>
  
@@ -4331,10 +4335,10 @@ index 9d5cb76..b8f5e6f 100644
  })();
  //]]>
  </script>
-diff --git a/luci-app-ssr-plus/po/zh_Hans/ssr-plus.po b/luci-app-ssr-plus/po/zh_Hans/ssr-plus.po
+diff --git a/po/zh_Hans/ssr-plus.po b/po/zh_Hans/ssr-plus.po
 index 8a04415..01cf55d 100644
---- a/luci-app-ssr-plus/po/zh_Hans/ssr-plus.po
-+++ b/luci-app-ssr-plus/po/zh_Hans/ssr-plus.po
+--- a/po/zh_Hans/ssr-plus.po
++++ b/po/zh_Hans/ssr-plus.po
 @@ -871,6 +871,85 @@ msgstr "启用 ML-DSA-65 (可选)"
  msgid "Enable Mihomo core"
  msgstr "启用 Mihomo 核心"
@@ -4706,10 +4710,10 @@ index 8a04415..01cf55d 100644
 +"Turn on \"Mihomo Smart Grouping and Auto Select\" on the Servers page first."
 +msgstr ""
 +"请先在「服务器」页开启「Mihomo 智能分组与自动选择」。"
-diff --git a/luci-app-ssr-plus/root/etc/init.d/shadowsocksr b/luci-app-ssr-plus/root/etc/init.d/shadowsocksr
+diff --git a/root/etc/init.d/shadowsocksr b/root/etc/init.d/shadowsocksr
 index b030126..d66abe3 100755
---- a/luci-app-ssr-plus/root/etc/init.d/shadowsocksr
-+++ b/luci-app-ssr-plus/root/etc/init.d/shadowsocksr
+--- a/root/etc/init.d/shadowsocksr
++++ b/root/etc/init.d/shadowsocksr
 @@ -603,6 +603,9 @@ prepare_clash_runtime_config() {
  	local merge_stats
  	local filled_groups
@@ -4753,10 +4757,10 @@ index b030126..d66abe3 100755
  
  	client_policy_stats="$(/usr/bin/lua "$CLASH_YAML_HELPER" append_client_policy_rules "$runtime_file" "$sid" 2>/dev/null)" || true
  	client_rules="$(printf '%s\n' "$client_policy_stats" | sed -n 's/.*client_rules=\([0-9][0-9]*\).*/\1/p' | tail -n1)"
-diff --git a/luci-app-ssr-plus/root/usr/share/shadowsocksr/clash_yaml.lua b/luci-app-ssr-plus/root/usr/share/shadowsocksr/clash_yaml.lua
+diff --git a/root/usr/share/shadowsocksr/clash_yaml.lua b/root/usr/share/shadowsocksr/clash_yaml.lua
 index 2a4d28a..465121a 100644
---- a/luci-app-ssr-plus/root/usr/share/shadowsocksr/clash_yaml.lua
-+++ b/luci-app-ssr-plus/root/usr/share/shadowsocksr/clash_yaml.lua
+--- a/root/usr/share/shadowsocksr/clash_yaml.lua
++++ b/root/usr/share/shadowsocksr/clash_yaml.lua
 @@ -253,6 +253,525 @@ local function fill_empty_proxy_groups(doc)
  	return changed
  end
@@ -5302,10 +5306,10 @@ index 2a4d28a..465121a 100644
  	return true
  end
  
-diff --git a/luci-app-ssr-plus/root/usr/share/shadowsocksr/shadowsocksr.config b/luci-app-ssr-plus/root/usr/share/shadowsocksr/shadowsocksr.config
+diff --git a/root/usr/share/shadowsocksr/shadowsocksr.config b/root/usr/share/shadowsocksr/shadowsocksr.config
 index 819ce76..ca07032 100644
---- a/luci-app-ssr-plus/root/usr/share/shadowsocksr/shadowsocksr.config
-+++ b/luci-app-ssr-plus/root/usr/share/shadowsocksr/shadowsocksr.config
+--- a/root/usr/share/shadowsocksr/shadowsocksr.config
++++ b/root/usr/share/shadowsocksr/shadowsocksr.config
 @@ -28,6 +28,13 @@ config server_subscribe
  	option auto_update_day_time '2'
  	option auto_update_min_time '0'

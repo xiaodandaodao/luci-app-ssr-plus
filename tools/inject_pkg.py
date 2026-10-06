@@ -154,12 +154,27 @@ def map_install(repo_rel):
     return None
 
 
+def normalize(repo_rel):
+    """把补丁里的路径统一成「仓库相对路径」（带 luci-app-ssr-plus/ 前缀）。
+
+    补丁有两种来源，路径写法不同：
+      · 上游整仓 diff                       → luci-app-ssr-plus/luasrc/...
+      · sync-upstream.sh --regen-patch      → luasrc/...（本仓库根 == 包根）
+    不统一的话 classify() 会把所有文件判成「仅参与构建」，payload 生成 0 个文件。
+    """
+    p = repo_rel.replace("\\", "/")
+    if not p.startswith(PKG + "/"):
+        p = PKG + "/" + p
+    return p
+
+
 def classify(repo_rel):
     """返回 ('app'|'i18n'|'none', install_path|None)。"""
-    install = map_install(repo_rel)
+    p = normalize(repo_rel)
+    install = map_install(p)
     if install:
         return "app", install
-    if repo_rel.replace("\\", "/") == "%s/po/zh_Hans/ssr-plus.po" % PKG:
+    if p == "%s/po/zh_Hans/ssr-plus.po" % PKG:
         return "i18n", "usr/lib/lua/luci/i18n/ssr-plus.zh-cn.lmo"
     return "none", None
 
@@ -226,6 +241,9 @@ def cmd_make_payload(args):
         os.makedirs(out)
 
         for rel, is_new in parse_patch(args.patch):
+            # 补丁路径可能是包内相对（regen-patch）或仓库相对（整仓 diff），
+            # 统一成仓库相对后再分类/定位源文件
+            repo = normalize(rel)
             kind, install = classify(rel)
             if kind == "none":
                 log("跳过（仅参与构建）: %s" % rel)
@@ -237,7 +255,7 @@ def cmd_make_payload(args):
                 common = "app"
             else:
                 # po -> lmo
-                po = os.path.join(src, rel)
+                po = os.path.join(src, repo)
                 lmo_tmp = os.path.join(tmp, "ssr-plus.zh-cn.lmo")
                 B.sh([B.PO2LMO_BIN, po, lmo_tmp])
                 srch = lmo_tmp
@@ -251,7 +269,7 @@ def cmd_make_payload(args):
             manifest_files.append({
                 "target": common,
                 "install": install,
-                "source": rel,
+                "source": repo,
                 "new": is_new,
                 "mode": "0%o" % mode,
                 "sha256": sha256_file(dst),
