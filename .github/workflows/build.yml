@@ -102,6 +102,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -114,7 +116,9 @@ jobs:
           {
             echo "## luci-app-ssr-plus ${GITHUB_REF_NAME}"
             echo
-            echo "基于 fw876/helloworld 上游 tag **v196.13**，附加 Smart Grouping（地区自动分组 + 自定义分组）改动。"
+            # 基线从 .upstream-base 读，别写死——同步上游后不必再改这里
+            UPSTREAM_BASE="$(tr -d '[:space:]' < .upstream-base 2>/dev/null || echo unknown)"
+            echo "基于 fw876/helloworld 上游 tag **${UPSTREAM_BASE}**，附加 Smart Grouping（地区自动分组 + 自定义分组）改动。"
             echo
             echo "### 安装"
             echo '```'
