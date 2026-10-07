@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "generated_from_version": "196-r1401",
+  "generated_from_version": "196-r1402",
   "generated_from_commit": "99a83b4",
   "patch": "ssrplus-local-changes.patch",
   "packages": {
@@ -63,7 +63,7 @@
       "source": "luci-app-ssr-plus/root/etc/init.d/shadowsocksr",
       "new": false,
       "mode": "0755",
-      "sha256": "b44514d40fb09428f366f071caf5402efd7d6ba88bc447d9c8cb9ca3117beff9"
+      "sha256": "2d22bb7dce94b2375d966368ae1937b3604a4c2e7831646886770cde92e429eb"
     },
     {
       "target": "app",
@@ -80,6 +80,14 @@
       "new": false,
       "mode": "0644",
       "sha256": "809f888c5e39c95c5ac38eef6ace87e1666f496354b482008149898a48c96d4b"
+    },
+    {
+      "target": "app",
+      "install": "usr/share/shadowsocksr/update_components.sh",
+      "source": "luci-app-ssr-plus/root/usr/share/shadowsocksr/update_components.sh",
+      "new": false,
+      "mode": "0644",
+      "sha256": "ef8c477e39892621d3239560132764c5eff5db06ec1db0dd904c2bed3871a500"
     }
   ]
 }

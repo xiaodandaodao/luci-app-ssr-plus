@@ -1,5 +1,5 @@
 diff --git a/Makefile b/Makefile
-index c7941e9..4c40503 100644
+index c7941e9..47c383e 100644
 --- a/Makefile
 +++ b/Makefile
 @@ -4,7 +4,11 @@ LUCI_TITLE:=luci-app-ssr-plus
@@ -11,7 +11,7 @@ index c7941e9..4c40503 100644
 +#   上游 v196.14 的第 1 版 = 1401，第 2 版 = 1402；上游升到 r15 则重新从 1501 起。
 +#   必须是纯数字且单调递增 —— apk 的 "-r" 后只接受整数（RE13 这类写法会被 mkpkg 拒绝），
 +#   数字编码同时保证 opkg/apk 都会把它判定为「比旧版新」的升级。
-+PKG_RELEASE:=1401
++PKG_RELEASE:=1402
  
  PKG_CONFIG_DEPENDS:= \
  	CONFIG_PACKAGE_$(PKG_NAME)_Iptables_Transparent_Proxy \
@@ -4711,7 +4711,7 @@ index 8a04415..01cf55d 100644
 +msgstr ""
 +"请先在「服务器」页开启「Mihomo 智能分组与自动选择」。"
 diff --git a/root/etc/init.d/shadowsocksr b/root/etc/init.d/shadowsocksr
-index b030126..d66abe3 100755
+index b030126..5953620 100755
 --- a/root/etc/init.d/shadowsocksr
 +++ b/root/etc/init.d/shadowsocksr
 @@ -603,6 +603,9 @@ prepare_clash_runtime_config() {
@@ -4757,6 +4757,85 @@ index b030126..d66abe3 100755
  
  	client_policy_stats="$(/usr/bin/lua "$CLASH_YAML_HELPER" append_client_policy_rules "$runtime_file" "$sid" 2>/dev/null)" || true
  	client_rules="$(printf '%s\n' "$client_policy_stats" | sed -n 's/.*client_rules=\([0-9][0-9]*\).*/\1/p' | tail -n1)"
+@@ -973,9 +989,12 @@ start_v2ray_with_mihomo() {
+ 	workdir="$(get_v2ray_mihomo_workdir "$instance_key")"
+ 	protocol_name="$(uci_get_by_name "$sid" v2ray_protocol)"
+ 	[ -n "$protocol_name" ] || protocol_name="$(uci_get_by_name "$sid" type)"
+-	ln_start_bin "$mihomo_bin" "$process_name" -d "$workdir" -f "$workdir/config.yaml"
+-	echolog "$log_prefix:Mihomo ($protocol_name) Started!"
+-	return 0
++	if start_mihomo_with_log "$mihomo_bin" "$process_name" "$workdir" "$log_prefix"; then
++		echolog "$log_prefix:Mihomo ($protocol_name) Started!"
++		return 0
++	fi
++	echolog "$log_prefix:Mihomo ($protocol_name) failed to start, see the output above."
++	return 1
+ }
+ 
+ start_socks5_udp_with_ipt2socks() {
+@@ -1065,7 +1084,46 @@ ln_start_bin() {
+ 		_exit 2
+ 	}
+ 	ulimit -n 1000000
+-	${file_func:-echolog "  - ${ln_name}"} "$@" >/dev/null 2>&1 &
++	# SSR_BIN_LOG 非空时保留这次启动的输出。mihomo 这类核心一旦启动即退出，
++	# 全部丢进 /dev/null 会让日志里一行线索都没有。
++	if [ -n "${SSR_BIN_LOG:-}" ]; then
++		${file_func:-echolog "  - ${ln_name}"} "$@" >>"$SSR_BIN_LOG" 2>&1 &
++	else
++		${file_func:-echolog "  - ${ln_name}"} "$@" >/dev/null 2>&1 &
++	fi
++}
++
++# 启动 mihomo 并确认它没在启动后立刻退出。
++# 用法：start_mihomo_with_log <bin> <process_name> <workdir> <log_prefix>
++# 返回 0 = 进程还在；返回 1 = 已经挂了，真实原因已写进 ssrplus 日志。
++start_mihomo_with_log() {
++	local mihomo_bin="$1"
++	local process_name="$2"
++	local workdir="$3"
++	local log_prefix="$4"
++	local mihomo_log line
++
++	mihomo_log="$workdir/mihomo.log"
++	: >"$mihomo_log" 2>/dev/null
++
++	SSR_BIN_LOG="$mihomo_log"
++	ln_start_bin "$mihomo_bin" "$process_name" -d "$workdir" -f "$workdir/config.yaml"
++	SSR_BIN_LOG=""
++
++	sleep 1
++	if ps_list | grep -v "grep" | grep -Fq "$workdir/config.yaml"; then
++		return 0
++	fi
++
++	echolog "$log_prefix:Mihomo exited immediately after startup, output follows:"
++	if [ -s "$mihomo_log" ]; then
++		while IFS= read -r line; do
++			[ -n "$line" ] && echolog "  $line"
++		done <"$mihomo_log"
++	else
++		echolog "  (no output at all - the binary itself may be broken or missing)"
++	fi
++	return 1
+ }
+ 
+ check_run_environment() {
+@@ -2441,8 +2499,12 @@ Start_Run() {
+ 			return 1
+ 		}
+ 		clash_workdir="$(get_clash_workdir "$GLOBAL_SERVER")"
+-		ln_start_bin "$mihomo_bin" ssr-retcp -d "$clash_workdir" -f "$clash_workdir/config.yaml"
+-		echolog "Main node: $($mihomo_bin -v 2>&1 | head -1 | awk '{print $1, $3}') (Clash) Started!"
++		if start_mihomo_with_log "$mihomo_bin" ssr-retcp "$clash_workdir" "Main node"; then
++			echolog "Main node: $($mihomo_bin -v 2>&1 | head -1 | awk '{print $1, $3}') (Clash) Started!"
++		else
++			echolog "Main node:Clash 节点启动失败，详见上面的输出。"
++			return 1
++		fi
+ 		;;
+ 	socks5)
+ 		if start_socks5_redir_with_ipt2socks "$GLOBAL_SERVER" "$tcp_port" "$threads"; then
 diff --git a/root/usr/share/shadowsocksr/clash_yaml.lua b/root/usr/share/shadowsocksr/clash_yaml.lua
 index 2a4d28a..465121a 100644
 --- a/root/usr/share/shadowsocksr/clash_yaml.lua
@@ -5324,3 +5403,35 @@ index 819ce76..ca07032 100644
  	option user_agent 'v2rayN/9.99'
  	option filter_words '过期/重置/套餐/剩余/网址/QQ群/官网/防失联/回国'
  
+diff --git a/root/usr/share/shadowsocksr/update_components.sh b/root/usr/share/shadowsocksr/update_components.sh
+index 257f8f2..b0b4a97 100644
+--- a/root/usr/share/shadowsocksr/update_components.sh
++++ b/root/usr/share/shadowsocksr/update_components.sh
+@@ -851,6 +851,13 @@ v2ray_geoip_upgrade() {
+ 
+ 	trap "rm -rf '$tmp_dir'" EXIT INT TERM
+ 
++	# 目标目录由 xray-core 之类的包创建；只装了 mihomo 的机器上往往不存在
++	if ! mkdir -p "$(dirname "$GEOIP_DAT_FILE")"; then
++		log_kv success 0
++		log_kv message 'Failed to create target directory'
++		return 0
++	fi
++
+ 	if ! download_file "$download_url" "$tmp_dir/geoip.dat"; then
+ 		log_kv success 0
+ 		log_kv message 'Download failed'
+@@ -939,6 +946,13 @@ v2ray_geosite_upgrade() {
+ 
+ 	trap "rm -rf '$tmp_dir'" EXIT INT TERM
+ 
++	# 目标目录由 xray-core 之类的包创建；只装了 mihomo 的机器上往往不存在
++	if ! mkdir -p "$(dirname "$GEOSITE_DAT_FILE")"; then
++		log_kv success 0
++		log_kv message 'Failed to create target directory'
++		return 0
++	fi
++
+ 	if ! download_file "$download_url" "$tmp_dir/geosite.dat"; then
+ 		log_kv success 0
+ 		log_kv message 'Download failed'

@@ -989,9 +989,12 @@ start_v2ray_with_mihomo() {
 	workdir="$(get_v2ray_mihomo_workdir "$instance_key")"
 	protocol_name="$(uci_get_by_name "$sid" v2ray_protocol)"
 	[ -n "$protocol_name" ] || protocol_name="$(uci_get_by_name "$sid" type)"
-	ln_start_bin "$mihomo_bin" "$process_name" -d "$workdir" -f "$workdir/config.yaml"
-	echolog "$log_prefix:Mihomo ($protocol_name) Started!"
-	return 0
+	if start_mihomo_with_log "$mihomo_bin" "$process_name" "$workdir" "$log_prefix"; then
+		echolog "$log_prefix:Mihomo ($protocol_name) Started!"
+		return 0
+	fi
+	echolog "$log_prefix:Mihomo ($protocol_name) failed to start, see the output above."
+	return 1
 }
 
 start_socks5_udp_with_ipt2socks() {
@@ -1081,7 +1084,46 @@ ln_start_bin() {
 		_exit 2
 	}
 	ulimit -n 1000000
-	${file_func:-echolog "  - ${ln_name}"} "$@" >/dev/null 2>&1 &
+	# SSR_BIN_LOG 非空时保留这次启动的输出。mihomo 这类核心一旦启动即退出，
+	# 全部丢进 /dev/null 会让日志里一行线索都没有。
+	if [ -n "${SSR_BIN_LOG:-}" ]; then
+		${file_func:-echolog "  - ${ln_name}"} "$@" >>"$SSR_BIN_LOG" 2>&1 &
+	else
+		${file_func:-echolog "  - ${ln_name}"} "$@" >/dev/null 2>&1 &
+	fi
+}
+
+# 启动 mihomo 并确认它没在启动后立刻退出。
+# 用法：start_mihomo_with_log <bin> <process_name> <workdir> <log_prefix>
+# 返回 0 = 进程还在；返回 1 = 已经挂了，真实原因已写进 ssrplus 日志。
+start_mihomo_with_log() {
+	local mihomo_bin="$1"
+	local process_name="$2"
+	local workdir="$3"
+	local log_prefix="$4"
+	local mihomo_log line
+
+	mihomo_log="$workdir/mihomo.log"
+	: >"$mihomo_log" 2>/dev/null
+
+	SSR_BIN_LOG="$mihomo_log"
+	ln_start_bin "$mihomo_bin" "$process_name" -d "$workdir" -f "$workdir/config.yaml"
+	SSR_BIN_LOG=""
+
+	sleep 1
+	if ps_list | grep -v "grep" | grep -Fq "$workdir/config.yaml"; then
+		return 0
+	fi
+
+	echolog "$log_prefix:Mihomo exited immediately after startup, output follows:"
+	if [ -s "$mihomo_log" ]; then
+		while IFS= read -r line; do
+			[ -n "$line" ] && echolog "  $line"
+		done <"$mihomo_log"
+	else
+		echolog "  (no output at all - the binary itself may be broken or missing)"
+	fi
+	return 1
 }
 
 check_run_environment() {
@@ -2457,8 +2499,12 @@ Start_Run() {
 			return 1
 		}
 		clash_workdir="$(get_clash_workdir "$GLOBAL_SERVER")"
-		ln_start_bin "$mihomo_bin" ssr-retcp -d "$clash_workdir" -f "$clash_workdir/config.yaml"
-		echolog "Main node: $($mihomo_bin -v 2>&1 | head -1 | awk '{print $1, $3}') (Clash) Started!"
+		if start_mihomo_with_log "$mihomo_bin" ssr-retcp "$clash_workdir" "Main node"; then
+			echolog "Main node: $($mihomo_bin -v 2>&1 | head -1 | awk '{print $1, $3}') (Clash) Started!"
+		else
+			echolog "Main node:Clash 节点启动失败，详见上面的输出。"
+			return 1
+		fi
 		;;
 	socks5)
 		if start_socks5_redir_with_ipt2socks "$GLOBAL_SERVER" "$tcp_port" "$threads"; then
