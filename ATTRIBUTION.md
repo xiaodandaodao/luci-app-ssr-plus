@@ -11,7 +11,7 @@
 | 上游仓库 | `https://github.com/fw876/helloworld` |
 | 基线 tag | **v196.14** |
 | 基线 commit | `99a83b4`（mihomo: enable UPX best compression by default） |
-| 包版本 | `luci-app-ssr-plus` `196-r1401`（上游 v196.14 为 `196-r14`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r14 的第 1 版」= `1401` |
+| 包版本 | `luci-app-ssr-plus` `196-r1402`（上游 v196.14 为 `196-r14`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r14 的第 1 版」= `1401` |
 | 许可证 | GPL-3.0（随仓库保留上游 `LICENSE` 原文，未改动） |
 
 上游 monorepo 里 `luci-app-ssr-plus/` 是一个子目录，本仓库把它**提升为仓库根**：
@@ -57,7 +57,14 @@
 | `root/etc/init.d/shadowsocksr` | `prepare_clash_runtime_config()` 中调用 + 日志 |
 | `root/usr/share/shadowsocksr/shadowsocksr.config` | 新增选项默认值 |
 | `po/zh_Hans/ssr-plus.po` | 新增文案翻译 |
-| `Makefile` | `PKG_RELEASE` `16` → `1401`（编码规则见 §1） |
+| `Makefile` | `PKG_RELEASE` `16` → `1402`（编码规则见 §1） |
+
+### ④ 排障增强（1402）
+
+| 文件 | 改动 |
+|---|---|
+| `root/etc/init.d/shadowsocksr` | `ln_start_bin()` 支持 `SSR_BIN_LOG`（原本一律 `>/dev/null 2>&1`，核心启动即退出时日志里一行线索都没有）；新增 `start_mihomo_with_log()`：留一份输出 + 启动后回看进程是否存活，挂了就把真实原因逐行写进日志并返回失败，替代原来无条件的 `Mihomo Started!`。单节点与 `type=clash` 两条启动路径都走它 |
+| `root/usr/share/shadowsocksr/update_components.sh` | `v2ray_geoip_upgrade()` / `v2ray_geosite_upgrade()` 补 `mkdir -p` 目标目录——只装了 mihomo、没装 xray-core 的机器上 `/usr/share/v2ray` 不存在，下载成功也会 `cp` 失败 |
 
 > 上游 `po/zh-cn/` 目录（同内容、旧命名）未同步改动，属已知差异，不影响 lmo 生成（本仓库用 `po/zh_Hans/`）。
 

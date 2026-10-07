@@ -12,7 +12,7 @@
 | **A. 源码补丁** `ssrplus-local-changes.patch` | 能拿到 helloworld 源码 | 源码树 + 打包环境 |
 | **B. 注入预编译包** `../payload/` + `../tools/inject_pkg.py` | **拿不到源码**（别人发布的闭源/预编译 ipk、apk） | 只要那个包本身 |
 
-两条路线产出的包，内容与从本项目源码直接构建的 `196-r1401` **完全一致**（见下文验证）。
+两条路线产出的包，内容与从本项目源码直接构建的 `196-r1402` **完全一致**（见下文验证）。
 
 ---
 
@@ -51,7 +51,7 @@ cd /path/to/ssrplus-local-build
 | `root/etc/init.d/shadowsocksr` | 启动日志补充分组统计 |
 | `root/usr/share/shadowsocksr/shadowsocksr.config` | 新增选项的默认值 |
 | `po/zh_Hans/ssr-plus.po` | 新增文案的中文翻译 |
-| `Makefile` | `PKG_RELEASE` → `1401` |
+| `Makefile` | `PKG_RELEASE` → `1402` |
 
 > 补丁的目标是「把上游 v196.14 变成 1401」，所以除了本次的分组功能，也一并带上了
 > 早先的 url-test 自动选节点与延迟可视化改动 —— 这些本来就是本项目相对上游的全部差异。
@@ -160,7 +160,7 @@ apk 的版本号语法实测很严：`+sg` / `~sg` / `.sg1` / `-sg` 全部被 `a
 * `git apply --check` / `patch -p1 --dry-run` 均干净通过
 * 打完补丁的树与当前工作树**逐文件 sha 完全一致**（整树递归 diff 为空）
 * 从打补丁的树构建：ipk `758cf2eb…`、apk `ffce796c…`、语言包 apk `076ab7fa…`
-  —— 与直接构建的 `196-r1401` **字节完全相同**
+  —— 与直接构建的 `196-r1402` **字节完全相同**
 * 语言包内的 `ssr-plus.zh-cn.lmo` sha `3dd3af54…` 三方一致
 
 **路线 B**（对 `196-r13` 基线包注入）
@@ -168,13 +168,13 @@ apk 的版本号语法实测很严：`+sg` / `~sg` / `.sg1` / `-sg` 全部被 `a
 | 比对 | 结果 |
 |---|---|
 | 注入后 ipk vs 基线 ipk | 差异 **8 项** = 7 个替换 + 1 个新增，其余文件一字未动 |
-| 注入后 ipk vs r1401 ipk | **0 差异** |
+| 注入后 ipk vs r1402 ipk | **0 差异** |
 | 注入后 apk vs 基线 apk | 差异 **8 项** |
-| 注入后 apk vs r1401 apk | **0 差异** |
+| 注入后 apk vs r1402 apk | **0 差异** |
 | apk 元数据 | name / arch / license / origin / maintainer / url / depends(16) / provides 全部保留 |
 | 语言包（ipk + apk） | 注入后 `.lmo` sha 与 payload 一致 |
 
-即：注入出来的包，文件树与从源码编译的 `196-r1401` 一模一样。
+即：注入出来的包，文件树与从源码编译的 `196-r1402` 一模一样。
 
 **未验证**：没有在真实路由器上 `opkg install` / `apk add` 跑过，也没有真机开启过新开关。
 装机建议先备份 `/etc/config/shadowsocksr`。

@@ -22,11 +22,11 @@
 
 ```sh
 # opkg（传统 ipk 固件）
-opkg install luci-app-ssr-plus_196-r1401_all.ipk
-opkg install luci-i18n-ssr-plus-zh-cn_196-r1401_all.ipk
+opkg install luci-app-ssr-plus_196-r1402_all.ipk
+opkg install luci-i18n-ssr-plus-zh-cn_196-r1402_all.ipk
 
 # apk（apk-tools v3 固件，如 OpenWrt 24.10+ / ImmortalWrt）
-apk add --allow-untrusted ./luci-app-ssr-plus-196-r1401.apk
+apk add --allow-untrusted ./luci-app-ssr-plus-196-r1402.apk
 ```
 
 装完刷新 LuCI 页面即可。功能开关默认是关的，在「服务 → ShadowSocksR Plus+ → 服务器」里打开。
@@ -107,8 +107,8 @@ bash tools/sync-upstream.sh v196.20      # 同步到上游某个 tag
 
 | 情况 | 值 |
 |---|---|
-| 上游 `v196.14` 的第 1 版（当前） | `1401` |
-| 同一上游基线上的第 2 次修订 | `1402` |
+| 上游 `v196.14` 的第 1 版 | `1401` |
+| 同一上游基线上的第 2 次修订（当前） | `1402` |
 | 上游升到 `v196.15` 后的第 1 版 | `1501` |
 
 之所以必须是**纯数字**：apk 的版本号是 `<PKG_VERSION>-r<PKG_RELEASE>`，`-r` 后面只接受整数。

@@ -851,6 +851,13 @@ v2ray_geoip_upgrade() {
 
 	trap "rm -rf '$tmp_dir'" EXIT INT TERM
 
+	# 目标目录由 xray-core 之类的包创建；只装了 mihomo 的机器上往往不存在
+	if ! mkdir -p "$(dirname "$GEOIP_DAT_FILE")"; then
+		log_kv success 0
+		log_kv message 'Failed to create target directory'
+		return 0
+	fi
+
 	if ! download_file "$download_url" "$tmp_dir/geoip.dat"; then
 		log_kv success 0
 		log_kv message 'Download failed'
@@ -938,6 +945,13 @@ v2ray_geosite_upgrade() {
 	backup_file="$tmp_dir/v2raygeosite.backup"
 
 	trap "rm -rf '$tmp_dir'" EXIT INT TERM
+
+	# 目标目录由 xray-core 之类的包创建；只装了 mihomo 的机器上往往不存在
+	if ! mkdir -p "$(dirname "$GEOSITE_DAT_FILE")"; then
+		log_kv success 0
+		log_kv message 'Failed to create target directory'
+		return 0
+	fi
 
 	if ! download_file "$download_url" "$tmp_dir/geosite.dat"; then
 		log_kv success 0
