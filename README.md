@@ -29,11 +29,11 @@ legacy SS 订阅解析修复）已全部并入。
 
 ```sh
 # opkg（传统 ipk 固件）
-opkg install luci-app-ssr-plus_196-r1901_all.ipk
-opkg install luci-i18n-ssr-plus-zh-cn_196-r1901_all.ipk
+opkg install luci-app-ssr-plus_196-r1902_all.ipk
+opkg install luci-i18n-ssr-plus-zh-cn_196-r1902_all.ipk
 
 # apk（apk-tools v3 固件，如 OpenWrt 24.10+ / ImmortalWrt）
-apk add --allow-untrusted ./luci-app-ssr-plus-196-r1901.apk
+apk add --allow-untrusted ./luci-app-ssr-plus-196-r1902.apk
 ```
 
 装完刷新 LuCI 页面即可。功能开关默认是关的，在「服务 → ShadowSocksR Plus+ → 服务器」里打开。
@@ -114,14 +114,14 @@ bash tools/sync-upstream.sh v196.20      # 同步到上游某个 tag
 
 | 情况 | 值 |
 |---|---|
-| 上游 `v196.19` 的第 1 版（当前） | `1901` |
-| 同一上游基线上的第 2 次修订 | `1902` |
+| 上游 `v196.19` 的第 1 版 | `1901` |
+| 同一上游基线上的第 2 次修订（当前，打包权限位修复） | `1902` |
 | 上游升到 `v196.20` 后的第 1 版 | `2001` |
 
 之所以必须是**纯数字**：apk 的版本号是 `<PKG_VERSION>-r<PKG_RELEASE>`，`-r` 后面只接受整数。
 `RE13` / `196R-r13` / `196-r13.1` 这类写法会被 `apk mkpkg` 直接拒绝（实测 `package version is invalid`），
 只有「单字母后缀」`196a-r13` 和「纯数字 revision」可行。数字编码同时保证数值单调递增，
-`opkg` / `apk` 都会判定为新版（`1901 > 1401 > 17 > 13`），旧的 `196-r17` 也能正常升级上来。
+`opkg` / `apk` 都会判定为新版（`1902 > 1901 > 1401 > 17 > 13`），旧的 `196-r17` 也能正常升级上来。
 
 合并完、跑过校验和构建之后，**必须重生成补丁并推进基线**：
 

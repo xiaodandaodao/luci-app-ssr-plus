@@ -586,8 +586,32 @@ def build_apk(out_path, stage, mtime, version, depends, pkgname=PKG,
 
 # ---------------------------------------------------------------- 校验
 
+def check_exec_bits(stage):
+    """语义校验：init.d 脚本与 ssrplus 目录下的 *.sh 必须带可执行位。
+
+    仅比对“包内=stage”抓不到这类 bug——两边同时丢位就都通过，
+    而设备上会直接 Permission denied（196-r1901 真实事故）。
+    """
+    bad = []
+    for dirpath, _, files in os.walk(stage):
+        for f in files:
+            p = os.path.join(dirpath, f)
+            if os.path.islink(p):
+                continue
+            rel = os.path.relpath(p, stage).replace(os.sep, "/")
+            need_exec = rel.startswith("etc/init.d/") or \
+                (rel.startswith("usr/share/shadowsocksr/") and rel.endswith(".sh"))
+            if need_exec and not (os.stat(p).st_mode & 0o111):
+                bad.append("缺少可执行位: " + rel)
+    return bad
+
+
 def verify_ipk(ipk, stage):
-    """解开 ipk，比对文件集合与权限。"""
+    """读 ipk 内 data/control 成员清单，比对文件集合与权限（不落盘）。
+
+    早期实现走 extractall，在某些托管 Python 环境（部分 shim 会拦截
+    os.mkdir/EEXIST）下会直接 PermissionError；读成员即可完成全部核对。
+    """
     import io as _io
     with open(ipk, "rb") as f:
         outer = tarfile.open(fileobj=f, mode="r:gz")
@@ -595,44 +619,39 @@ def verify_ipk(ipk, stage):
         assert "./debian-binary" in names and "./data.tar.gz" in names and "./control.tar.gz" in names, names
         data_gz = outer.extractfile("./data.tar.gz").read()
         ctl_gz = outer.extractfile("./control.tar.gz").read()
-    tmp = tempfile.mkdtemp(prefix="vipk-")
-    try:
-        data = tarfile.open(fileobj=_io.BytesIO(data_gz), mode="r:gz")
-        data.extractall(tmp)
-        ctl = tarfile.open(fileobj=_io.BytesIO(ctl_gz), mode="r:gz")
-        ctl_names = ctl.getnames()
 
-        src, dst = set(), set()
-        for dirpath, _, files in os.walk(stage):
-            for f in files:
-                rel = os.path.relpath(os.path.join(dirpath, f), stage)
-                src.add(rel)
-        for dirpath, _, files in os.walk(tmp):
-            for f in files:
-                rel = os.path.relpath(os.path.join(dirpath, f), tmp)
-                dst.add(rel)
-        # 权限抽样核对
-        bad = []
-        for m in data.getmembers():
-            if not m.isfile() or m.issym():
-                continue
-            rel = m.name[2:]
-            sp = os.path.join(stage, rel)
-            if not os.path.exists(sp):
-                bad.append("多余: " + rel)
-                continue
-            want = stat.S_IMODE(os.stat(sp).st_mode)
-            if m.mode != want:
-                bad.append("权限不符 %s: %o != %o" % (rel, m.mode, want))
-            if m.uid != 0 or m.gid != 0:
-                bad.append("属主不是 root: " + rel)
-        return (src == dst), sorted(src - dst), sorted(dst - src), bad, ctl_names
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+    data = tarfile.open(fileobj=_io.BytesIO(data_gz), mode="r:gz")
+    ctl = tarfile.open(fileobj=_io.BytesIO(ctl_gz), mode="r:gz")
+    ctl_names = ctl.getnames()
+
+    src, dst = set(), set()
+    for dirpath, _, files in os.walk(stage):
+        for f in files:
+            src.add(os.path.relpath(os.path.join(dirpath, f), stage))
+
+    bad = []
+    for m in data.getmembers():
+        if m.isdir():
+            continue
+        rel = m.name[2:] if m.name.startswith("./") else m.name
+        dst.add(rel)
+        sp = os.path.join(stage, rel)
+        if not os.path.exists(sp):
+            bad.append("多余: " + rel)
+            continue
+        if m.issym():
+            continue
+        want = stat.S_IMODE(os.stat(sp).st_mode)
+        if m.mode != want:
+            bad.append("权限不符 %s: %o != %o" % (rel, m.mode, want))
+        if m.uid != 0 or m.gid != 0:
+            bad.append("属主不是 root: " + rel)
+    bad.extend(check_exec_bits(stage))
+    return (src == dst), sorted(src - dst), sorted(dst - src), bad, ctl_names
 
 
 def verify_apk(apk, stage):
-    """用 apk 自身解包做回环校验。"""
+    """用 apk 自身解包做回环校验（文件集合 + 权限）。"""
     tmp = tempfile.mkdtemp(prefix="vapk-")
     try:
         sh([APK_BIN, "--allow-untrusted", "extract", "--destination", tmp, apk], check=False)
@@ -643,7 +662,18 @@ def verify_apk(apk, stage):
         for dirpath, _, files in os.walk(tmp):
             for f in files:
                 dst.add(os.path.relpath(os.path.join(dirpath, f), tmp))
-        return (src == dst), sorted(src - dst), sorted(dst - src)
+        bad = []
+        for rel in sorted(src & dst):
+            sp = os.path.join(stage, rel)
+            dp = os.path.join(tmp, rel)
+            if os.path.islink(sp):
+                continue
+            want = stat.S_IMODE(os.stat(sp).st_mode)
+            got = stat.S_IMODE(os.stat(dp).st_mode)
+            if want != got:
+                bad.append("权限不符 %s: %o != %o" % (rel, got, want))
+        bad.extend(check_exec_bits(stage))
+        return (src == dst), sorted(src - dst), sorted(dst - src), bad
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -743,6 +773,11 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
 
     git_modes = git_file_modes(repo, rel)
+    # 本仓库（rel="."）时 git ls-files 返回的路径不带包名前缀，
+    # 而 stage_tree 的查表键是 "<pkg>/<src_prefix>/<rel>"，缺前缀会全部
+    # 回退成 0644 —— 196-r1901 设备上 init.d / *.sh 丢可执行位就源于此。
+    if rel == ".":
+        git_modes = {"%s/%s" % (PKG, k): v for k, v in git_modes.items()}
     stage = os.path.join(out_dir, ".stage")
     modes = stage_tree(src_pkg, stage, PKG, meta["raw_version"], git_modes)
     set_tree_meta(stage, modes, mtime)
@@ -769,8 +804,8 @@ def main():
         build_apk(p, apk_stage, mtime, meta["version"], depends,
                   arch="noarch", description=meta["title"],
                   provides=["%s-any" % PKG])
-        ok, miss, extra = verify_apk(p, apk_stage)
-        made.append(("apk", p, ok, "缺失%s 多余%s" % (miss, extra), ""))
+        ok, miss, extra, bad = verify_apk(p, apk_stage)
+        made.append(("apk", p, ok, "缺失%s 多余%s 异常%s" % (miss, extra, bad), ""))
 
     if not args.no_i18n:
         i18n = build_i18n(repo, src_pkg, out_dir, mtime, mtime,
@@ -789,8 +824,8 @@ def main():
                 build_apk(p, i18n["stage"], mtime, i18n["version"], i18n["depends"],
                           arch="noarch", pkgname=i18n["name"],
                           description=i18n["description"], scripts=False)
-                ok, miss, extra = verify_apk(p, i18n["stage"])
-                made.append(("apk", p, ok, "缺失%s 多余%s" % (miss, extra), ""))
+                ok, miss, extra, bad = verify_apk(p, i18n["stage"])
+                made.append(("apk", p, ok, "缺失%s 多余%s 异常%s" % (miss, extra, bad), ""))
 
     log("")
     for kind, p, ok, detail, extra in made:
