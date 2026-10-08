@@ -23,7 +23,7 @@
       "source": "luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/component.lua",
       "new": false,
       "mode": "0644",
-      "sha256": "4f6e9d637fcbcfd88dfaa6c2251a453c23bceaf46d75a66acd5f48cdbc2f9734"
+      "sha256": "0f94513be249242a0740734f4cdaae4d24248cfe2da80bdd2d31a791c5400749"
     },
     {
       "target": "app",
@@ -63,7 +63,7 @@
       "source": "luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm",
       "new": false,
       "mode": "0644",
-      "sha256": "3b7a608dcc68326e0cc68b40aad6c4a21c3d3a159dd1e914b9a329eb505f0e2f"
+      "sha256": "bd55459ecec9b2a965460d27ee1861f9a21167d3ebd44e744451c85c29703da8"
     },
     {
       "target": "i18n",

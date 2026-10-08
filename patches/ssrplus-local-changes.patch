@@ -264,7 +264,7 @@ index 1869b48..60272a3 100644
  end
  
 diff --git a/luasrc/model/cbi/shadowsocksr/component.lua b/luasrc/model/cbi/shadowsocksr/component.lua
-index 8d670cd..59dcea3 100644
+index 8d670cd..9d6daaf 100644
 --- a/luasrc/model/cbi/shadowsocksr/component.lua
 +++ b/luasrc/model/cbi/shadowsocksr/component.lua
 @@ -12,10 +12,10 @@ s = m:section(SimpleSection)
@@ -276,7 +276,7 @@ index 8d670cd..59dcea3 100644
  o:value("ghproxy_cc", "ghproxy.cc")
  o:value("ghfast", "ghfast.top")
 -o:value("jsdelivr", "cdn.jsdelivr.net")
-+o:value("jsdelivr", "testingcf.jsdelivr.net")
++o:value("jsdelivr", "jsdelivr.net")
  o.rmempty = false
  o.cfgvalue = function(self)
  	return m.uci:get_first("shadowsocksr", "global", "component_mirror") or "direct"
@@ -3759,7 +3759,7 @@ index 9d5cb76..eebb855 100644
  //]]>
  </script>
 diff --git a/luasrc/view/shadowsocksr/component.htm b/luasrc/view/shadowsocksr/component.htm
-index a1d040d..c620931 100644
+index a1d040d..774579f 100644
 --- a/luasrc/view/shadowsocksr/component.htm
 +++ b/luasrc/view/shadowsocksr/component.htm
 @@ -3,7 +3,7 @@
@@ -3843,7 +3843,7 @@ index a1d040d..c620931 100644
  	}, 0);
  //]]>
  </script>
-@@ -453,7 +467,7 @@
+@@ -453,10 +467,10 @@
  							</div>
  							<select id="component-mirror" class="cbi-input-select component-selector" onchange="onMirrorChange()">
  								<option value="direct" selected="selected"><%:GitHub Direct%></option>
@@ -3851,7 +3851,11 @@ index a1d040d..c620931 100644
 +								<option value="ghproxy">ghproxy.net</option>
  								<option value="ghproxy_cc">ghproxy.cc</option>
  								<option value="ghfast">ghfast.top</option>
- 								<option value="jsdelivr">cdn.jsdelivr.net</option>
+-								<option value="jsdelivr">cdn.jsdelivr.net</option>
++								<option value="jsdelivr">jsdelivr.net</option>
+ 							</select>
+ 						</div>
+ 						<div class="component-select-item">
 diff --git a/po/templates/ssr-plus.pot b/po/templates/ssr-plus.pot
 index baaf4cd..4f513d3 100644
 --- a/po/templates/ssr-plus.pot
