@@ -9,9 +9,9 @@
 | 项目 | 值 |
 |---|---|
 | 上游仓库 | `https://github.com/fw876/helloworld` |
-| 基线 tag | **v196.14** |
-| 基线 commit | `99a83b4`（mihomo: enable UPX best compression by default） |
-| 包版本 | `luci-app-ssr-plus` `196-r1403`（上游 v196.14 为 `196-r14`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r14 的第 1 版」= `1401` |
+| 基线 tag | **v196.19** |
+| 基线 commit | `16617be`（luci-app-ssr-plus: fix legacy SS subscription parsing with Xray） |
+| 包版本 | `luci-app-ssr-plus` `196-r1901`（上游 v196.19 为 `196-r19`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r19 的第 1 版」= `1901` |
 | 许可证 | GPL-3.0（随仓库保留上游 `LICENSE` 原文，未改动） |
 
 上游 monorepo 里 `luci-app-ssr-plus/` 是一个子目录，本仓库把它**提升为仓库根**：
@@ -25,9 +25,27 @@
 因此 `patches/` 里的补丁仍是**上游视角**的路径（`luci-app-ssr-plus/…`，用于打在上游 / fork 的 helloworld 树上），
 若要直接打在本仓库根，请用 `patch -p2` / `git apply -p2`。
 
-## 2. 相对上游的功能改动（10 个文件）
+## 2. 相对上游的功能改动（12 个文件）
 
-对应 `patches/ssrplus-local-changes.patch`，三批改动：
+对应 `patches/ssrplus-local-changes.patch`。
+
+### ⓪ 上游 v196.14 → v196.19 的改动（全部并入，非本仓库原创）
+
+按 `tools/sync-upstream.sh` 的差分重放流程同步，其中 4 个 commit 触及本包：
+
+| 上游 commit | 内容 |
+|---|---|
+| `c39f1e3` | AnyTLS 支持：新增 `sing-anytls` outbound，含节点导入、配置生成、编辑与旧节点迁移 |
+| `b791299` | 修复 nftables GFW 模式下的 DNS 转发 |
+| `afb3aaf` | 可选 IPv6 流量代理：nftables IPv6 TCP/UDP 规则、AAAA 地址集、国内 IPv6 地址库（默认关闭） |
+| `16617be` | 修复 legacy SS 订阅链接在 Xray 下的解析（整段 Base64 先解码再解析端点） |
+
+冲突裁决：`Makefile` 的 `PKG_RELEASE` 取我们的 `1901`；`po/zh_Hans/ssr-plus.po`
+两边的新增条目都保留（我们的 Clash 面板文案 + 上游 IPv6/AnyTLS 文案）。
+
+### ①–⑤ 本仓库的改动
+
+以下五批改动：
 
 ### ① 面板延迟可视化
 
@@ -84,12 +102,15 @@ LuCI 侧边栏的独立页面 —— 三处来回跳。现在合并成一个弹�
 组件升级完成后走同一个钩子自动 reload —— 内核（xray / mihomo / naiveproxy）与 Geo 库
 调 `clash_refresh` 重载服务，主程序（LuCI 包）则刷新页面。
 
-### ⑤ 排障增强（1402）
+### ⑤ 排障增强（1402 引入 → 1403 重写时丢失 → 1901 重新并入）
 
 | 文件 | 改动 |
 |---|---|
 | `root/etc/init.d/shadowsocksr` | `ln_start_bin()` 支持 `SSR_BIN_LOG`（原本一律 `>/dev/null 2>&1`，核心启动即退出时日志里一行线索都没有）；新增 `start_mihomo_with_log()`：留一份输出 + 启动后回看进程是否存活，挂了就把真实原因逐行写进日志并返回失败，替代原来无条件的 `Mihomo Started!`。单节点与 `type=clash` 两条启动路径都走它 |
 | `root/usr/share/shadowsocksr/update_components.sh` | `v2ray_geoip_upgrade()` / `v2ray_geosite_upgrade()` 补 `mkdir -p` 目标目录——只装了 mihomo、没装 xray-core 的机器上 `/usr/share/v2ray` 不存在，下载成功也会 `cp` 失败 |
+
+> 1403 重写 Clash 面板时把这一批改动整段漏掉了（表现为 mihomo 起不来、日志里却一行原因都没有）。
+> 1901 在同步上游 v196.19 的同时把它重新合了回来，并保留 1403 的 `apply_clash_autoselect()` 调用。
 
 > 上游 `po/zh-cn/` 目录（同内容、旧命名）未同步改动，属已知差异，不影响 lmo 生成（本仓库用 `po/zh_Hans/`）。
 
@@ -105,7 +126,7 @@ LuCI 侧边栏的独立页面 —— 三处来回跳。现在合并成一个弹�
 | `tools/build_preview.py` | 把面板模板渲染成可离线打开的预览页（含明暗主题） | 本项目自研 |
 | `tools/smoke_test.js` | jsdom 无头冒烟测试（25 项断言，可抓 `node --check` 抓不到的 TEXT 漏键 → 按钮显示 `undefined` 之类） | 本项目自研 |
 | `tools/inject_pkg.py` | 无源码注入工具：把改动注入别人预编译的 ipk/apk（`make-payload` / `show` / `apply`） | 本项目自研 |
-| `patches/` | 相对上游 v196.14 的统一 diff + 移植说明 | 本项目自研 |
+| `patches/` | 相对上游 v196.19 的统一 diff + 移植说明 | 本项目自研 |
 | `payload/` | 注入载荷（9 个文件 + manifest.json），接收方无需源码 | 本项目自研 |
 
 ## 4. 构建期下载的第三方二进制（不入库）
@@ -120,5 +141,5 @@ LuCI 侧边栏的独立页面 —— 三处来回跳。现在合并成一个弹�
 ## 5. 说明
 
 - 本仓库**不是**上游官方发布渠道，产出物仅供自用/分发参考；请优先支持上游作者。
-- 上游若更新，建议按仓库 README 的「同步上游」流程 rebase 并重放上述 10 个文件的改动。
+- 上游若更新，建议按仓库 README 的「同步上游」流程 rebase 并重放上述 12 个文件的改动。
 - 若本仓库内容对上游权利人有任何不妥，可随时移除相关衍生部分。

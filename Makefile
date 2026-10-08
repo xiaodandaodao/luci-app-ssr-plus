@@ -5,10 +5,10 @@ LUCI_PKGARCH:=all
 PKG_NAME:=luci-app-ssr-plus
 PKG_VERSION:=196
 # PKG_RELEASE 编码规则：<上游 release><两位本方修订序>
-#   上游 v196.14 的第 1 版 = 1401，第 2 版 = 1402；上游升到 r15 则重新从 1501 起。
+#   上游 v196.19 的第 1 版 = 1901，第 2 版 = 1902；上游升到 r20 则重新从 2001 起。
 #   必须是纯数字且单调递增 —— apk 的 "-r" 后只接受整数（RE13 这类写法会被 mkpkg 拒绝），
 #   数字编码同时保证 opkg/apk 都会把它判定为「比旧版新」的升级。
-PKG_RELEASE:=1403
+PKG_RELEASE:=1901
 
 PKG_CONFIG_DEPENDS:= \
 	CONFIG_PACKAGE_$(PKG_NAME)_Iptables_Transparent_Proxy \
@@ -31,7 +31,7 @@ PKG_CONFIG_DEPENDS:= \
 	CONFIG_PACKAGE_$(PKG_NAME)_INCLUDE_ShadowsocksR_Libev_Client \
 	CONFIG_PACKAGE_$(PKG_NAME)_INCLUDE_ShadowsocksR_Libev_Server
 
-LUCI_TITLE:=SS/SSR/V2Ray/Trojan/NaiveProxy/Tuic/ShadowTLS/Hysteria/Socks5/Clash LuCI interface
+LUCI_TITLE:=SS/SSR/V2Ray/Trojan/NaiveProxy/Tuic/ShadowTLS/Hysteria/AnyTLS/Socks5/Clash LuCI interface
 LUCI_PKGARCH:=all
 LUCI_DEPENDS:= \
 	+libuci-lua +lua +luci-compat +dns2tcp +dnsmasq-full \

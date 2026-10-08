@@ -13,13 +13,13 @@
 | **A. 源码补丁** `ssrplus-local-changes.patch` | 能拿到 helloworld 源码 | 源码树 + 打包环境 |
 | **B. 注入预编译包** `../payload/` + `../tools/inject_pkg.py` | **拿不到源码**（别人发布的闭源/预编译 ipk、apk） | 只要那个包本身 |
 
-两条路线产出的包，内容与从本项目源码直接构建的 `196-r1403` **完全一致**（见下文验证）。
+两条路线产出的包，内容与从本项目源码直接构建的 `196-r1901` **完全一致**（见下文验证）。
 
 ---
 
 ## A. 源码补丁
 
-补丁相对 **上游 `fw876/helloworld` 的 tag `v196.14`** 生成，包含 10 个文件的改动
+补丁相对 **上游 `fw876/helloworld` 的 tag `v196.19`** 生成，包含 12 个文件的改动
 （其中 `luasrc/view/shadowsocksr/clash_groups_ui.htm` 是新增文件）。
 
 ```bash
@@ -48,18 +48,20 @@ cd /path/to/ssrplus-local-build
 | `luasrc/view/shadowsocksr/clash_groups_ui.htm` | **新增**：策略组卡片流面板前端组件 |
 | `luasrc/view/shadowsocksr/clash_main_panel.htm` | 引入新组件、传入新接口地址 |
 | `luasrc/view/shadowsocksr/clash_panel.htm` | 同上（独立页面版） |
+| `luasrc/view/shadowsocksr/component.htm` | 组件更新页签增加懒加载与升级后钩子 |
 | `luasrc/model/cbi/shadowsocksr/servers.lua` | 开关：`mihomo_urltest`（Clash 自动切换）、`mihomo_autoselect_apply` |
 | `root/etc/init.d/shadowsocksr` | `apply_clash_autoselect()` 启动后切到自动组 + 日志；mihomo 启动失败写出真实原因 |
 | `root/usr/share/shadowsocksr/shadowsocksr.config` | 新增选项的默认值 |
 | `po/zh_Hans/ssr-plus.po` | 新增文案的中文翻译 |
-| `Makefile` | `PKG_RELEASE` → `1403` |
+| `root/usr/share/shadowsocksr/update_components.sh` | geo 数据升级前 `mkdir -p` 目标目录 |
+| `Makefile` | `PKG_RELEASE` → `1901` |
 
-> 补丁的目标是「把上游 v196.14 变成 1403」，所以除了本次的自动切换功能，也一并带上了
+> 补丁的目标是「把上游 v196.19 变成 1901」，所以除了本次的自动切换功能，也一并带上了
 > 早先的延迟可视化与排障增强改动 —— 这些本来就是本项目相对上游的全部差异。
 
 ### 换到别的上游版本
 
-补丁与 `v196.14` 严格对应。如果上游已经发了更新的版本（例如 `v196.20`），
+补丁与 `v196.19` 严格对应。如果上游已经发了更新的版本（例如 `v196.20`），
 `controller` / `servers.lua` / `po` 这些文件很可能已经变了，补丁会有冲突。
 这种情况下**建议走路线 B**：注入是文件级替换，只要求目标包是 `arch=all` 的纯脚本包，
 对上游版本不敏感。若坚持用补丁，用 `git apply -3`（三方合并）处理冲突后，
@@ -154,14 +156,14 @@ apk 的版本号语法实测很严：`+sg` / `~sg` / `.sg1` / `-sg` 全部被 `a
 
 ## 验证记录（都做过实测）
 
-用**未打补丁的 `v196.14` 纯净源码树**构建出「官方基线包」（`196-r14`）作为靶子：
+用**未打补丁的 `v196.19` 纯净源码树**构建出「官方基线包」（`196-r19`）作为靶子：
 
 **路线 A**
 
 * `git apply --check` / `patch -p1 --dry-run` 均干净通过
 * 打完补丁的树与当前工作树**逐文件 sha 完全一致**（整树递归 diff 为空）
 * 从打补丁的树构建：ipk `758cf2eb…`、apk `ffce796c…`、语言包 apk `076ab7fa…`
-  —— 与直接构建的 `196-r1403` **字节完全相同**
+  —— 与直接构建的 `196-r1901` **字节完全相同**
 * 语言包内的 `ssr-plus.zh-cn.lmo` sha `3dd3af54…` 三方一致
 
 **路线 B**（对 `196-r13` 基线包注入）
@@ -169,13 +171,13 @@ apk 的版本号语法实测很严：`+sg` / `~sg` / `.sg1` / `-sg` 全部被 `a
 | 比对 | 结果 |
 |---|---|
 | 注入后 ipk vs 基线 ipk | 差异 **8 项** = 7 个替换 + 1 个新增，其余文件一字未动 |
-| 注入后 ipk vs r1403 ipk | **0 差异** |
+| 注入后 ipk vs r1901 ipk | **0 差异** |
 | 注入后 apk vs 基线 apk | 差异 **8 项** |
-| 注入后 apk vs r1403 apk | **0 差异** |
+| 注入后 apk vs r1901 apk | **0 差异** |
 | apk 元数据 | name / arch / license / origin / maintainer / url / depends(16) / provides 全部保留 |
 | 语言包（ipk + apk） | 注入后 `.lmo` sha 与 payload 一致 |
 
-即：注入出来的包，文件树与从源码编译的 `196-r1403` 一模一样。
+即：注入出来的包，文件树与从源码编译的 `196-r1901` 一模一样。
 
 **未验证**：没有在真实路由器上 `opkg install` / `apk add` 跑过，也没有真机开启过新开关。
 装机建议先备份 `/etc/config/shadowsocksr`。

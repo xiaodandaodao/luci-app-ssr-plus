@@ -11,8 +11,8 @@
 #     3) 和我们改过的文件走三方合并，只有真正同行冲突才停下
 #
 # 版本号策略（PKG_RELEASE）—— 与上游 tag 一一对应，所以冲突时永远取我们的：
-#   <上游 release><两位本方修订序>：上游 r14 的第 1 版 = 1401，第 2 版 = 1402；
-#   上游升到 r15 则重新从 1501 起。必须是纯数字（apk 的 "-r" 后只接受整数）。
+#   <上游 release><两位本方修订序>：上游 r19 的第 1 版 = 1901，第 2 版 = 1902；
+#   上游升到 r20 则重新从 2001 起。必须是纯数字（apk 的 "-r" 后只接受整数）。
 #
 # 用法：
 #   bash tools/sync-upstream.sh --status          查看当前基线与已拉取的上游 tag
@@ -25,7 +25,7 @@ set -euo pipefail
 PKG_SUBDIR="luci-app-ssr-plus"           # 本包在上游仓库里的路径
 PKG_PATHS=(Makefile luasrc root po)      # 本仓库内属于「包本体」的路径（补丁只含这些）
 BASE_FILE=".upstream-base"               # 记录我们当前对齐的上游 tag
-DEFAULT_BASE="v196.14"
+DEFAULT_BASE="v196.19"
 UPSTREAM_REMOTE="upstream"
 UPSTREAM_REPO="${UPSTREAM_REPO:-https://github.com/fw876/helloworld.git}"
 NS="refs/upstream-tags"                  # 上游 tag 存这里，不与本仓库自己的 v* 混
