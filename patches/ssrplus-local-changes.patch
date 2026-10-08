@@ -1,25 +1,25 @@
 diff --git a/Makefile b/Makefile
-index c7941e9..13c8b17 100644
+index 425251a..cb02cef 100644
 --- a/Makefile
 +++ b/Makefile
 @@ -4,7 +4,11 @@ LUCI_TITLE:=luci-app-ssr-plus
  LUCI_PKGARCH:=all
  PKG_NAME:=luci-app-ssr-plus
  PKG_VERSION:=196
--PKG_RELEASE:=14
+-PKG_RELEASE:=19
 +# PKG_RELEASE 编码规则：<上游 release><两位本方修订序>
-+#   上游 v196.14 的第 1 版 = 1401，第 2 版 = 1402；上游升到 r15 则重新从 1501 起。
++#   上游 v196.19 的第 1 版 = 1901，第 2 版 = 1902；上游升到 r20 则重新从 2001 起。
 +#   必须是纯数字且单调递增 —— apk 的 "-r" 后只接受整数（RE13 这类写法会被 mkpkg 拒绝），
 +#   数字编码同时保证 opkg/apk 都会把它判定为「比旧版新」的升级。
-+PKG_RELEASE:=1403
++PKG_RELEASE:=1901
  
  PKG_CONFIG_DEPENDS:= \
  	CONFIG_PACKAGE_$(PKG_NAME)_Iptables_Transparent_Proxy \
 diff --git a/luasrc/controller/shadowsocksr.lua b/luasrc/controller/shadowsocksr.lua
-index 6a5a01b..bed520e 100644
+index 1869b48..60272a3 100644
 --- a/luasrc/controller/shadowsocksr.lua
 +++ b/luasrc/controller/shadowsocksr.lua
-@@ -463,14 +463,23 @@ local function resolve_active_clash_sid(sid)
+@@ -464,14 +464,23 @@ local function resolve_active_clash_sid(sid)
  	return nil
  end
  
@@ -45,7 +45,7 @@ index 6a5a01b..bed520e 100644
  		luci.util.shellquote("Content-Type: application/json"),
  		luci.util.shellquote("Authorization: Bearer " .. secret),
  		method,
-@@ -515,6 +524,121 @@ local function parse_clash_groups(raw)
+@@ -516,6 +525,121 @@ local function parse_clash_groups(raw)
  	return groups
  end
  
@@ -167,7 +167,7 @@ index 6a5a01b..bed520e 100644
  local function parse_kv_output(raw)
  	local data = {}
  	for line in tostring(raw or ""):gmatch("[^\r\n]+") do
-@@ -678,6 +802,7 @@ function index()
+@@ -679,6 +803,7 @@ function index()
  	entry({"admin", "services", "shadowsocksr", "delete"}, call("act_delete"))
  	entry({"admin", "services", "shadowsocksr", "clash_panel"}, call("clash_panel")).leaf = true
  	entry({"admin", "services", "shadowsocksr", "clash_groups"}, call("clash_groups")).leaf = true
@@ -175,7 +175,7 @@ index 6a5a01b..bed520e 100644
  	entry({"admin", "services", "shadowsocksr", "clash_switch"}, call("clash_switch")).leaf = true
  	entry({"admin", "services", "shadowsocksr", "clash_refresh"}, call("clash_refresh")).leaf = true
  	entry({"admin", "services", "shadowsocksr", "clash_reset_defaults"}, call("clash_reset_defaults")).leaf = true
-@@ -1100,19 +1225,83 @@ end
+@@ -1101,19 +1226,83 @@ end
  function clash_groups()
  	local sid = luci.http.formvalue("sid")
  	local groups = {}
@@ -3818,7 +3818,7 @@ index a1d040d..f1d0e84 100644
  //]]>
  </script>
 diff --git a/po/zh_Hans/ssr-plus.po b/po/zh_Hans/ssr-plus.po
-index 8a04415..14751c2 100644
+index 831ac7f..a59f109 100644
 --- a/po/zh_Hans/ssr-plus.po
 +++ b/po/zh_Hans/ssr-plus.po
 @@ -479,6 +479,10 @@ msgstr "客户端规则已导出为 CSV 文件。"
@@ -3901,11 +3901,10 @@ index 8a04415..14751c2 100644
  #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:162
  #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:315
  msgid "Upgrading..."
-@@ -3861,3 +3905,189 @@ msgstr "对被代理的 UDP/443 流量处理方式"
- 
+@@ -3862,6 +3906,192 @@ msgstr "对被代理的 UDP/443 流量处理方式"
  #~ msgid "Include Mihomo (Clash Support)"
  #~ msgstr "包含 Mihomo（Clash 支持）"
-+
+ 
 +#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm:0
 +#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_panel.htm:0
 +msgid "Auto Selected:"
@@ -4091,11 +4090,15 @@ index 8a04415..14751c2 100644
 +" service starts. Turn it off to switch manually in the Proxy Group"
 +" panel."
 +msgstr "每次启动服务时把所有选择器指向各自的自动组。关掉的话就只能在策略组面板里手动切换。"
++
+ msgid "Idle session check interval (seconds)"
+ msgstr "空闲会话检查间隔（秒）"
+ 
 diff --git a/root/etc/init.d/shadowsocksr b/root/etc/init.d/shadowsocksr
-index b030126..cfa3283 100755
+index 8ee8755..d2548e9 100755
 --- a/root/etc/init.d/shadowsocksr
 +++ b/root/etc/init.d/shadowsocksr
-@@ -603,6 +603,9 @@ prepare_clash_runtime_config() {
+@@ -635,6 +635,9 @@ prepare_clash_runtime_config() {
  	local merge_stats
  	local filled_groups
  	local stripped_script_rules
@@ -4105,7 +4108,7 @@ index b030126..cfa3283 100755
  	local clash_secret
  	local dns_ipv4_only
  	local dns_mode
-@@ -618,6 +621,8 @@ prepare_clash_runtime_config() {
+@@ -650,6 +653,8 @@ prepare_clash_runtime_config() {
  	merge_stats=""
  	filled_groups=0
  	stripped_script_rules=0
@@ -4114,7 +4117,7 @@ index b030126..cfa3283 100755
  	clash_secret="$(get_clash_api_secret "$sid")"
  	dns_ipv4_only="$(get_filter_aaaa)"
  	dns_mode="$(uci_get_by_type global pdnsd_enable 0)"
-@@ -676,12 +681,26 @@ prepare_clash_runtime_config() {
+@@ -709,12 +714,26 @@ prepare_clash_runtime_config() {
  	stripped_script_rules="$(printf '%s\n' "$merge_stats" | sed -n 's/.*stripped_script_rules=\([0-9][0-9]*\).*/\1/p' | tail -n1)"
  	[ -n "$filled_groups" ] || filled_groups=0
  	[ -n "$stripped_script_rules" ] || stripped_script_rules=0
@@ -4141,7 +4144,7 @@ index b030126..cfa3283 100755
  
  	client_policy_stats="$(/usr/bin/lua "$CLASH_YAML_HELPER" append_client_policy_rules "$runtime_file" "$sid" 2>/dev/null)" || true
  	client_rules="$(printf '%s\n' "$client_policy_stats" | sed -n 's/.*client_rules=\([0-9][0-9]*\).*/\1/p' | tail -n1)"
-@@ -706,6 +725,71 @@ prepare_clash_runtime_config() {
+@@ -739,6 +758,71 @@ prepare_clash_runtime_config() {
  	link_mihomo_geodata "$workdir"
  }
  
@@ -4213,7 +4216,7 @@ index b030126..cfa3283 100755
  resolve_global_clash_socks_port() {
  	local socks_enabled
  	local socks_server
-@@ -973,9 +1057,12 @@ start_v2ray_with_mihomo() {
+@@ -1011,9 +1095,12 @@ start_v2ray_with_mihomo() {
  	workdir="$(get_v2ray_mihomo_workdir "$instance_key")"
  	protocol_name="$(uci_get_by_name "$sid" v2ray_protocol)"
  	[ -n "$protocol_name" ] || protocol_name="$(uci_get_by_name "$sid" type)"
@@ -4229,7 +4232,7 @@ index b030126..cfa3283 100755
  }
  
  start_socks5_udp_with_ipt2socks() {
-@@ -1065,7 +1152,46 @@ ln_start_bin() {
+@@ -1103,7 +1190,46 @@ ln_start_bin() {
  		_exit 2
  	}
  	ulimit -n 1000000
@@ -4277,7 +4280,7 @@ index b030126..cfa3283 100755
  }
  
  check_run_environment() {
-@@ -2441,8 +2567,13 @@ Start_Run() {
+@@ -2487,8 +2613,13 @@ Start_Run() {
  			return 1
  		}
  		clash_workdir="$(get_clash_workdir "$GLOBAL_SERVER")"
@@ -4294,7 +4297,7 @@ index b030126..cfa3283 100755
  	socks5)
  		if start_socks5_redir_with_ipt2socks "$GLOBAL_SERVER" "$tcp_port" "$threads"; then
 diff --git a/root/usr/share/shadowsocksr/clash_yaml.lua b/root/usr/share/shadowsocksr/clash_yaml.lua
-index 2a4d28a..ec798cd 100644
+index beda6d7..711dc38 100644
 --- a/root/usr/share/shadowsocksr/clash_yaml.lua
 +++ b/root/usr/share/shadowsocksr/clash_yaml.lua
 @@ -253,6 +253,249 @@ local function fill_empty_proxy_groups(doc)
@@ -4568,10 +4571,10 @@ index 2a4d28a..ec798cd 100644
  end
  
 diff --git a/root/usr/share/shadowsocksr/shadowsocksr.config b/root/usr/share/shadowsocksr/shadowsocksr.config
-index 819ce76..1c29d8d 100644
+index 0810b88..64e1d56 100644
 --- a/root/usr/share/shadowsocksr/shadowsocksr.config
 +++ b/root/usr/share/shadowsocksr/shadowsocksr.config
-@@ -28,6 +28,11 @@ config server_subscribe
+@@ -30,6 +30,11 @@ config server_subscribe
  	option auto_update_day_time '2'
  	option auto_update_min_time '0'
  	option url_test_url 'https://www.google.com/generate_204'
