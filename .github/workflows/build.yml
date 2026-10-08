@@ -118,7 +118,11 @@ jobs:
             echo
             # 基线从 .upstream-base 读，别写死——同步上游后不必再改这里
             UPSTREAM_BASE="$(tr -d '[:space:]' < .upstream-base 2>/dev/null || echo unknown)"
-            echo "基于 fw876/helloworld 上游 tag **${UPSTREAM_BASE}**，附加 Smart Grouping（地区自动分组 + 自定义分组）改动。"
+            echo "基于 fw876/helloworld 上游 tag **${UPSTREAM_BASE}**，附加以下改动："
+            echo
+            echo "- **Clash 自动切换**：为每个 select 选择器生成 url-test 影子组，由 Mihomo 持续挑最快节点"
+            echo "- **策略组面板延迟可视化**：自动选择 / 当前选中 / 实际出口 + 成员延迟 chip，单组与全部测速"
+            echo "- **统一 Clash 面板**：代理组 / 客户端规则 / 组件更新 三页签，保存后自动重载生效"
             echo
             echo "### 安装"
             echo '```'
