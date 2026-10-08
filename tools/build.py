@@ -587,12 +587,15 @@ def build_apk(out_path, stage, mtime, version, depends, pkgname=PKG,
 # ---------------------------------------------------------------- 校验
 
 def check_exec_bits(stage):
-    """语义校验：init.d 脚本与 ssrplus 目录下的 *.sh 必须带可执行位。
+    """语义校验：init.d 脚本与 /usr/share/<pkg>/ 下的 *.sh 必须带可执行位。
 
     仅比对“包内=stage”抓不到这类 bug——两边同时丢位就都通过，
     而设备上会直接 Permission denied（196-r1901 真实事故）。
+    注意：只经 `/bin/sh <path>` 调用的脚本（如 update_components.sh）
+    上游本来就是 0644，不在此列。
     """
     bad = []
+    share_prefix = "usr/share/%s/" % PKG
     for dirpath, _, files in os.walk(stage):
         for f in files:
             p = os.path.join(dirpath, f)
@@ -600,7 +603,7 @@ def check_exec_bits(stage):
                 continue
             rel = os.path.relpath(p, stage).replace(os.sep, "/")
             need_exec = rel.startswith("etc/init.d/") or \
-                (rel.startswith("usr/share/shadowsocksr/") and rel.endswith(".sh"))
+                (rel.startswith(share_prefix) and rel.endswith(".sh"))
             if need_exec and not (os.stat(p).st_mode & 0o111):
                 bad.append("缺少可执行位: " + rel)
     return bad
