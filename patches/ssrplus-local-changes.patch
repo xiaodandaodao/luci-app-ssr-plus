@@ -1,5 +1,5 @@
 diff --git a/Makefile b/Makefile
-index 425251a..10abd80 100644
+index 425251a..b1d60f2 100644
 --- a/Makefile
 +++ b/Makefile
 @@ -4,7 +4,11 @@ LUCI_TITLE:=luci-app-ssr-plus
@@ -8,10 +8,10 @@ index 425251a..10abd80 100644
  PKG_VERSION:=196
 -PKG_RELEASE:=19
 +# PKG_RELEASE 编码规则：<上游 release><两位本方修订序>
-+#   上游 v196.19 的第 1 版 = 1901，第 2 版 = 1902；上游升到 r20 则重新从 2001 起。
++#   上游 v196.19 的第 1 版 = 1901，第 2 版 = 1902，第 3 版 = 1903；上游升到 r20 则重新从 2001 起。
 +#   必须是纯数字且单调递增 —— apk 的 "-r" 后只接受整数（RE13 这类写法会被 mkpkg 拒绝），
 +#   数字编码同时保证 opkg/apk 都会把它判定为「比旧版新」的升级。
-+PKG_RELEASE:=1902
++PKG_RELEASE:=1903
  
  PKG_CONFIG_DEPENDS:= \
  	CONFIG_PACKAGE_$(PKG_NAME)_Iptables_Transparent_Proxy \
@@ -263,6 +263,23 @@ index 1869b48..60272a3 100644
  	})
  end
  
+diff --git a/luasrc/model/cbi/shadowsocksr/component.lua b/luasrc/model/cbi/shadowsocksr/component.lua
+index 8d670cd..59dcea3 100644
+--- a/luasrc/model/cbi/shadowsocksr/component.lua
++++ b/luasrc/model/cbi/shadowsocksr/component.lua
+@@ -12,10 +12,10 @@ s = m:section(SimpleSection)
+ 
+ o = m:field(ListValue, "component_mirror", translate("Mirror URL"))
+ o:value("direct", translate("GitHub Direct"))
+-o:value("ghproxy", "mirror.ghproxy.com")
++o:value("ghproxy", "ghproxy.net")
+ o:value("ghproxy_cc", "ghproxy.cc")
+ o:value("ghfast", "ghfast.top")
+-o:value("jsdelivr", "cdn.jsdelivr.net")
++o:value("jsdelivr", "testingcf.jsdelivr.net")
+ o.rmempty = false
+ o.cfgvalue = function(self)
+ 	return m.uci:get_first("shadowsocksr", "global", "component_mirror") or "direct"
 diff --git a/luasrc/model/cbi/shadowsocksr/servers.lua b/luasrc/model/cbi/shadowsocksr/servers.lua
 index e7b13fa..fa1facf 100644
 --- a/luasrc/model/cbi/shadowsocksr/servers.lua
@@ -3742,9 +3759,18 @@ index 9d5cb76..eebb855 100644
  //]]>
  </script>
 diff --git a/luasrc/view/shadowsocksr/component.htm b/luasrc/view/shadowsocksr/component.htm
-index a1d040d..f1d0e84 100644
+index a1d040d..c620931 100644
 --- a/luasrc/view/shadowsocksr/component.htm
 +++ b/luasrc/view/shadowsocksr/component.htm
+@@ -3,7 +3,7 @@
+ 	var componentMeta = {
+ 		mainprogram: {
+ 			label: '<%:SSR Plus+ Main Program%>',
+-			help: '<%:The online upgrade downloads the latest luci-app-ssr-plus package from fw876/helloworld releases and installs the matching IPK or APK package for this system.%>'
++			help: '<%:The online upgrade downloads the latest luci-app-ssr-plus package from the xiaodandaodao/luci-app-ssr-plus GitHub releases and installs the matching IPK or APK package for this system.%>'
+ 		},
+ 		xray: {
+ 			label: '<%:Xray-core%>',
 @@ -166,14 +166,17 @@
  			action.innerHTML = doUpgrade ? '<%:Processing...%>' : '';
  		}
@@ -3817,8 +3843,34 @@ index a1d040d..f1d0e84 100644
  	}, 0);
  //]]>
  </script>
+@@ -453,7 +467,7 @@
+ 							</div>
+ 							<select id="component-mirror" class="cbi-input-select component-selector" onchange="onMirrorChange()">
+ 								<option value="direct" selected="selected"><%:GitHub Direct%></option>
+-								<option value="ghproxy">mirror.ghproxy.com</option>
++								<option value="ghproxy">ghproxy.net</option>
+ 								<option value="ghproxy_cc">ghproxy.cc</option>
+ 								<option value="ghfast">ghfast.top</option>
+ 								<option value="jsdelivr">cdn.jsdelivr.net</option>
+diff --git a/po/templates/ssr-plus.pot b/po/templates/ssr-plus.pot
+index baaf4cd..4f513d3 100644
+--- a/po/templates/ssr-plus.pot
++++ b/po/templates/ssr-plus.pot
+@@ -2660,9 +2660,9 @@ msgstr ""
+ 
+ #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:6
+ msgid ""
+-"The online upgrade downloads the latest luci-app-ssr-plus package from fw876/"
+-"helloworld releases and installs the matching IPK or APK package for this "
+-"system."
++"The online upgrade downloads the latest luci-app-ssr-plus package from the "
++"xiaodandaodao/luci-app-ssr-plus GitHub releases and installs the matching IPK "
++"or APK package for this system."
+ msgstr ""
+ 
+ #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:10
 diff --git a/po/zh_Hans/ssr-plus.po b/po/zh_Hans/ssr-plus.po
-index 831ac7f..a59f109 100644
+index 831ac7f..11b0531 100644
 --- a/po/zh_Hans/ssr-plus.po
 +++ b/po/zh_Hans/ssr-plus.po
 @@ -479,6 +479,10 @@ msgstr "客户端规则已导出为 CSV 文件。"
@@ -3863,6 +3915,24 @@ index 831ac7f..a59f109 100644
  #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:1699
  msgid ""
  "Enable Multipath TCP, need to be enabled in both server and client "
+@@ -2680,12 +2708,12 @@ msgstr "心跳包发送间隔（单位：秒）"
+ 
+ #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:6
+ msgid ""
+-"The online upgrade downloads the latest luci-app-ssr-plus package from fw876/"
+-"helloworld releases and installs the matching IPK or APK package for this "
+-"system."
++"The online upgrade downloads the latest luci-app-ssr-plus package from the "
++"xiaodandaodao/luci-app-ssr-plus GitHub releases and installs the matching IPK "
++"or APK package for this system."
+ msgstr ""
+-"在线更新会从 fw876/helloworld 发布页下载最新 luci-app-ssr-plus，并根据当前系"
+-"统安装匹配的 IPK 或 APK 包。"
++"在线更新会从 xiaodandaodao/luci-app-ssr-plus 发布页下载最新 luci-app-ssr-plus，"
++"并根据当前系统安装匹配的 IPK 或 APK 包。"
+ 
+ #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:10
+ msgid ""
 @@ -2729,10 +2757,6 @@ msgstr "该部分目前无任何内容。"
  msgid "Through proxy update"
  msgstr "通过代理更新"
@@ -4587,10 +4657,165 @@ index 0810b88..64e1d56 100644
  	option filter_words '过期/重置/套餐/剩余/网址/QQ群/官网/防失联/回国'
  
 diff --git a/root/usr/share/shadowsocksr/update_components.sh b/root/usr/share/shadowsocksr/update_components.sh
-index 257f8f2..b0b4a97 100644
+index 257f8f2..572d9df 100644
 --- a/root/usr/share/shadowsocksr/update_components.sh
 +++ b/root/usr/share/shadowsocksr/update_components.sh
-@@ -851,6 +851,13 @@ v2ray_geoip_upgrade() {
+@@ -2,7 +2,12 @@
+ 
+ set -u
+ 
++# Xray/Mihomo/NaiveProxy 的二进制包仍由上游 helloworld Release 提供
+ XRAY_RELEASE_PAGE="https://github.com/fw876/helloworld/releases/latest"
++# SSR+ 主程序（luci-app-ssr-plus）：在线升级指向本衍生仓库的 Release
++MAINPROGRAM_REPO="xiaodandaodao/luci-app-ssr-plus"
++# GitHub 加速代理：直连 github.com 失败时的兜底通道（可用 GH_PROXY_HOSTS 覆盖）
++GH_PROXY_HOSTS="${GH_PROXY_HOSTS:-ghfast.top ghproxy.net ghproxy.cc gh-proxy.com}"
+ XRAY_BINARY="/usr/bin/xray"
+ 
+ # Geo 数据文件 URL
+@@ -56,7 +61,7 @@ mirror_wrap_url() {
+ 			printf '%s' "$raw_url"
+ 			;;
+ 		ghproxy)
+-			printf 'https://mirror.ghproxy.com/%s' "$raw_url"
++			printf 'https://ghproxy.net/%s' "$raw_url"
+ 			;;
+ 		ghproxy_cc)
+ 			printf 'https://ghproxy.cc/%s' "$raw_url"
+@@ -294,19 +299,86 @@ effective_url() {
+ 	printf '%s' "$url"
+ }
+ 
++# 把 github.com 原始地址套上加速代理（每个代理一行）
++github_proxy_urls() {
++	local raw="$1"
++	local host
++
++	for host in $GH_PROXY_HOSTS; do
++		[ -n "$host" ] || continue
++		printf 'https://%s/%s\n' "$host" "$raw"
++	done
++}
++
++# 已知仓库的 Release 资产在 jsdelivr 的 release 分支镜像（国内通常可直连）
++jsdelivr_alt_url() {
++	local raw="$1"
++
++	case "$raw" in
++		https://github.com/Loyalsoldier/geoip/releases/download/*)
++			printf '%s' "$raw" | sed 's#https://github.com/Loyalsoldier/geoip/releases/download/[^/]*/\(.*\)#https://testingcf.jsdelivr.net/gh/Loyalsoldier/geoip@release/\1#'
++			;;
++		https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/*)
++			printf '%s' "$raw" | sed 's#https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/[^/]*/\(.*\)#https://testingcf.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/\1#'
++			;;
++		https://github.com/alecthw/mmdb_china_ip_list/releases/download/*)
++			printf '%s' "$raw" | sed 's#https://github.com/alecthw/mmdb_china_ip_list/releases/download/[^/]*/\(.*\)#https://testingcf.jsdelivr.net/gh/alecthw/mmdb_china_ip_list@release/lite/\1#' | sed 's#-lite##'
++			;;
++		*)
++			return 1
++			;;
++	esac
++
++	return 0
++}
++
++# 单次抓取文本（不做备用源切换）
++fetch_text_once() {
++	local url="$1"
++	local wget_cmd out
++
++	out="$(curl -kfsSL --http1.1 --connect-timeout 10 --retry 2 -A 'curl/8.0' -H 'Accept: application/vnd.github+json' "$url" 2>/dev/null)"
++	if [ -n "$out" ]; then
++		printf '%s' "$out"
++		return 0
++	fi
++
++	wget_cmd="$(select_wget_cmd 2>/dev/null || true)"
++	if [ -n "$wget_cmd" ]; then
++		out="$("$wget_cmd" --header='Accept: application/vnd.github+json' --timeout=20 --tries=3 --no-check-certificate -O - "$url" 2>/dev/null)"
++		if [ -n "$out" ]; then
++			printf '%s' "$out"
++			return 0
++		fi
++	fi
++
++	return 1
++}
++
++# 抓取文本：原地址失败时改走 GitHub 加速代理
+ fetch_text() {
+ 	local url="$1"
+-	local wget_cmd
++	local alt
+ 
+-	if curl -kfsSL --http1.1 --connect-timeout 10 --retry 2 -A 'curl/8.0' -H 'Accept: application/vnd.github+json' "$url" 2>/dev/null; then
++	if fetch_text_once "$url"; then
+ 		return 0
+ 	fi
+ 
+-	wget_cmd="$(select_wget_cmd)" || return 1
+-	"$wget_cmd" --header='Accept: application/vnd.github+json' --timeout=20 --tries=3 --no-check-certificate -O - "$url" 2>/dev/null
++	case "$url" in
++		https://github.com/*)
++			for alt in $(github_proxy_urls "$url"); do
++				if fetch_text_once "$alt"; then
++					return 0
++				fi
++			done
++			;;
++	esac
++
++	return 1
+ }
+ 
+-download_file() {
++# 单次下载（不做备用源切换）
++download_url_once() {
+ 	local url="$1"
+ 	local output="$2"
+ 	local wget_cmd
+@@ -315,10 +387,39 @@ download_file() {
+ 		return 0
+ 	fi
+ 
+-	wget_cmd="$(select_wget_cmd)" || return 1
++	wget_cmd="$(select_wget_cmd 2>/dev/null || true)"
++	[ -n "$wget_cmd" ] || return 1
+ 	"$wget_cmd" --no-check-certificate --timeout=20 --tries=3 -O "$output" "$url" >/dev/null 2>&1
+ }
+ 
++# 下载文件：原地址（含用户选的镜像）失败时，依次尝试 jsdelivr 镜像与 GitHub 加速代理
++download_file() {
++	local url="$1"
++	local output="$2"
++	local alt
++
++	if download_url_once "$url" "$output"; then
++		return 0
++	fi
++
++	case "$url" in
++		https://github.com/*)
++			alt="$(jsdelivr_alt_url "$url" 2>/dev/null || true)"
++			if [ -n "$alt" ] && download_url_once "$alt" "$output"; then
++				return 0
++			fi
++
++			for alt in $(github_proxy_urls "$url"); do
++				if download_url_once "$alt" "$output"; then
++					return 0
++				fi
++			done
++			;;
++	esac
++
++	return 1
++}
++
+ store_geo_version() {
+ 	local geo="$1"
+ 	local version="$2"
+@@ -851,6 +952,13 @@ v2ray_geoip_upgrade() {
  
  	trap "rm -rf '$tmp_dir'" EXIT INT TERM
  
@@ -4604,7 +4829,7 @@ index 257f8f2..b0b4a97 100644
  	if ! download_file "$download_url" "$tmp_dir/geoip.dat"; then
  		log_kv success 0
  		log_kv message 'Download failed'
-@@ -939,6 +946,13 @@ v2ray_geosite_upgrade() {
+@@ -939,6 +1047,13 @@ v2ray_geosite_upgrade() {
  
  	trap "rm -rf '$tmp_dir'" EXIT INT TERM
  
@@ -4618,3 +4843,38 @@ index 257f8f2..b0b4a97 100644
  	if ! download_file "$download_url" "$tmp_dir/geosite.dat"; then
  		log_kv success 0
  		log_kv message 'Download failed'
+@@ -997,6 +1112,17 @@ get_helloworld_latest_tag() {
+ 	printf '%s' "$tag"
+ }
+ 
++# 取本仓库（MAINPROGRAM_REPO）最新 Release 的 tag
++get_mainprogram_latest_tag() {
++	local location tag
++
++	[ -n "$MAINPROGRAM_REPO" ] || return 1
++	location="$(effective_url "https://github.com/$MAINPROGRAM_REPO/releases/latest")" || return 1
++	tag="$(printf '%s' "$location" | sed -n 's#.*/tag/\([^/]*\)$#\1#p' | sed -n '1p')"
++	[ -n "$tag" ] || return 1
++	printf '%s' "$tag"
++}
++
+ select_xray_asset() {
+ 	local asset_list="$1"
+ 	local pm="$2"
+@@ -1252,12 +1378,12 @@ get_mainprogram_latest_info() {
+ 	local pm release_html tag version asset asset_list url
+ 
+ 	pm="$(detect_package_manager)" || return 2
+-	tag="$(get_helloworld_latest_tag)" || return 3
+-	release_html="$(fetch_text "https://github.com/fw876/helloworld/releases/expanded_assets/$tag")" || return 3
+-	asset_list="$(printf '%s\n' "$release_html" | sed -n 's#.*href="/fw876/helloworld/releases/download/[^/]*/\([^"]*\)".*#\1#p')"
++	tag="$(get_mainprogram_latest_tag)" || return 3
++	release_html="$(fetch_text "https://github.com/$MAINPROGRAM_REPO/releases/expanded_assets/$tag")" || return 3
++	asset_list="$(printf '%s\n' "$release_html" | sed -n 's#.*href="/[^/]*/[^/]*/releases/download/[^/]*/\([^"]*\)".*#\1#p')"
+ 	asset="$(select_mainprogram_asset "$asset_list" "$pm")" || return 4
+ 	version="$(mainprogram_asset_version "$asset" 2>/dev/null || trim_version "$tag")"
+-	url="$(mirror_wrap_url "https://github.com/fw876/helloworld/releases/download/$tag/$asset")"
++	url="$(mirror_wrap_url "https://github.com/$MAINPROGRAM_REPO/releases/download/$tag/$asset")"
+ 
+ 	log_kv package_manager "$pm"
+ 	log_kv arch "$(get_openwrt_arch)"

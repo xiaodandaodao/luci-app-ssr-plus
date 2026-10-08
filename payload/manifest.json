@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "generated_from_version": "196-r1902",
+  "generated_from_version": "196-r1903",
   "generated_from_commit": "16617be",
   "patch": "ssrplus-local-changes.patch",
   "packages": {
@@ -16,6 +16,14 @@
       "new": false,
       "mode": "0644",
       "sha256": "7da8998ec64d061fa50592cd462929e7ee885739d63e9ec8f6c8aa9b05057f3d"
+    },
+    {
+      "target": "app",
+      "install": "usr/lib/lua/luci/model/cbi/shadowsocksr/component.lua",
+      "source": "luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/component.lua",
+      "new": false,
+      "mode": "0644",
+      "sha256": "4f6e9d637fcbcfd88dfaa6c2251a453c23bceaf46d75a66acd5f48cdbc2f9734"
     },
     {
       "target": "app",
@@ -55,7 +63,7 @@
       "source": "luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm",
       "new": false,
       "mode": "0644",
-      "sha256": "882957d41c9ef50d48d3f772fac73d8dabb49d8af6201f500ebb6fbf0af39ec4"
+      "sha256": "3b7a608dcc68326e0cc68b40aad6c4a21c3d3a159dd1e914b9a329eb505f0e2f"
     },
     {
       "target": "i18n",
@@ -63,7 +71,7 @@
       "source": "luci-app-ssr-plus/po/zh_Hans/ssr-plus.po",
       "new": false,
       "mode": "0644",
-      "sha256": "6057d8119e89c7444a7365f60b6c6bb59eaba7eef8eb9a68216b29ce9c20c5e9"
+      "sha256": "d7476537a141403f37d2dd6db8c110cb7eaaf3d385f720df6a5ee90073a8f8e8"
     },
     {
       "target": "app",
@@ -95,7 +103,7 @@
       "source": "luci-app-ssr-plus/root/usr/share/shadowsocksr/update_components.sh",
       "new": false,
       "mode": "0644",
-      "sha256": "ef8c477e39892621d3239560132764c5eff5db06ec1db0dd904c2bed3871a500"
+      "sha256": "992bf277500ffb4f5c5889c2439ea8c8b999336598371f0fd1084ee2463692da"
     }
   ]
 }

@@ -13,7 +13,7 @@
 | **A. 源码补丁** `ssrplus-local-changes.patch` | 能拿到 helloworld 源码 | 源码树 + 打包环境 |
 | **B. 注入预编译包** `../payload/` + `../tools/inject_pkg.py` | **拿不到源码**（别人发布的闭源/预编译 ipk、apk） | 只要那个包本身 |
 
-两条路线产出的包，内容与从本项目源码直接构建的 `196-r1902` **完全一致**（见下文验证）。
+两条路线产出的包，内容与从本项目源码直接构建的 `196-r1903` **完全一致**（见下文验证）。
 
 ---
 
@@ -48,16 +48,17 @@ cd /path/to/ssrplus-local-build
 | `luasrc/view/shadowsocksr/clash_groups_ui.htm` | **新增**：策略组卡片流面板前端组件 |
 | `luasrc/view/shadowsocksr/clash_main_panel.htm` | 引入新组件、传入新接口地址 |
 | `luasrc/view/shadowsocksr/clash_panel.htm` | 同上（独立页面版） |
-| `luasrc/view/shadowsocksr/component.htm` | 组件更新页签增加懒加载与升级后钩子 |
+| `luasrc/view/shadowsocksr/component.htm` | 组件更新页签增加懒加载与升级后钩子；主程序条目的源地址说明改为本仓库 |
+| `luasrc/model/cbi/shadowsocksr/component.lua` | 镜像下拉的显示名（`ghproxy` → `ghproxy.net`，`jsdelivr` → `testingcf.jsdelivr.net`），option 值不变 |
 | `luasrc/model/cbi/shadowsocksr/servers.lua` | 开关：`mihomo_urltest`（Clash 自动切换）、`mihomo_autoselect_apply` |
 | `root/etc/init.d/shadowsocksr` | `apply_clash_autoselect()` 启动后切到自动组 + 日志；mihomo 启动失败写出真实原因 |
 | `root/usr/share/shadowsocksr/shadowsocksr.config` | 新增选项的默认值 |
-| `po/zh_Hans/ssr-plus.po` | 新增文案的中文翻译 |
-| `root/usr/share/shadowsocksr/update_components.sh` | geo 数据升级前 `mkdir -p` 目标目录 |
-| `Makefile` | `PKG_RELEASE` → `1902` |
+| `po/zh_Hans/ssr-plus.po`、`po/templates/ssr-plus.pot` | 新增文案的中文翻译 |
+| `root/usr/share/shadowsocksr/update_components.sh` | 主程序在线升级源改指本仓库 Release；geo 升级前 `mkdir -p` 目标目录；`download_file` / `fetch_text` 增加 jsdelivr 与 GitHub 加速代理兜底；替换已失效的 `mirror.ghproxy.com` |
+| `Makefile` | `PKG_RELEASE` → `1903` |
 
-> 补丁的目标是「把上游 v196.19 变成 1902」，所以除了本次的自动切换功能，也一并带上了
-> 早先的延迟可视化与排障增强改动 —— 这些本来就是本项目相对上游的全部差异。
+> 补丁的目标是「把上游 v196.19 变成 1903」，所以除了本次的主程序源地址与下载兜底改动，也一并带上了
+> 早先的延迟可视化、自动切换与排障增强改动 —— 这些本来就是本项目相对上游的全部差异。
 
 ### 换到别的上游版本
 
@@ -154,7 +155,7 @@ apk 的版本号语法实测很严：`+sg` / `~sg` / `.sg1` / `-sg` 全部被 `a
 
 ---
 
-## 验证记录（都做过实测）
+## 验证记录（都做过实测，196-r1903）
 
 用**未打补丁的 `v196.19` 纯净源码树**构建出「官方基线包」（`196-r19`）作为靶子：
 
@@ -162,25 +163,27 @@ apk 的版本号语法实测很严：`+sg` / `~sg` / `.sg1` / `-sg` 全部被 `a
 
 * `git apply --check` / `patch -p1 --dry-run` 均干净通过
 * 打完补丁的树与当前工作树**逐文件 sha 完全一致**（包内容目录递归 diff 为空）
-* 从打补丁的树构建（`build.py --src <patched-helloworld>`）：ipk `dd533a857b8b7d09…`、
-  apk `53c7c56f2dae098f…`，静态校验含新增的可执行位检查，全部 OK
-* 与从本仓库直接构建的 `196-r1902` 比对**包内文件树**：72 个文件、名称/权限/内容 sha
-  零差异（外层字节不同只来自 tar mtime，无意义）
+* 从打补丁的树构建（`build.py --src <patched-helloworld>`）：ipk `99f15848c5f9bad0…`、
+  apk `8a7ee4f1cbf82d13…`，静态校验含可执行位检查，全部 OK
+* 与从本仓库直接构建的 `196-r1903` 比对**包内文件树**：72 个文件、名称/权限/内容 sha
+  **零差异**（外层字节不同只来自 tar mtime，无意义）
 
-**路线 B**（对 `196-r13` 基线包注入；`1902` 的载荷文件内容与 `1901` 相同，仅 manifest 版本号更新）
+**路线 B**（对 `196-r13` 基线包注入；本版载荷 12 个文件，其中 app 侧 11 个＝10 替换 + 1 新增）
 
 | 比对 | 结果 |
 |---|---|
-| 注入后 ipk vs 基线 ipk | 差异 **8 项** = 7 个替换 + 1 个新增，其余文件一字未动 |
-| 注入后 ipk vs r1902 ipk | **0 差异** |
-| 注入后 apk vs 基线 apk | 差异 **8 项** |
-| 注入后 apk vs r1902 apk | **0 差异** |
-| apk 元数据 | name / arch / license / origin / maintainer / url / depends(16) / provides 全部保留 |
-| 语言包（ipk + apk） | 注入后 `.lmo` sha 与 payload 一致 |
+| 注入后 ipk vs 基线 ipk | 只动了载荷那 11 个文件（10 替换 + 1 新增），其余 59 个文件一字未动 |
+| 注入后 ipk 的那 11 个文件 vs 源码构建的 `196-r1903` | **逐文件 sha 完全一致** |
+| 注入后 apk vs 基线 apk | 同上，只动载荷文件 |
+| apk 元数据 | name / arch / license / origin / maintainer / url / depends / provides 全部保留 |
+| 语言包（ipk + apk） | 注入时若带 `--i18n` 参数，`.lmo` sha 与 payload 一致 |
 
-即：注入出来的包，文件树与从源码编译的 `196-r1902` 一模一样。
+> 注意：`196-r13` 是**旧基线**，上游在 r13→r19 之间自己改过 12 个文件（`gen_config.lua`、
+> `subscribe.lua`、`update.lua`、`client-config.lua`、`gfw2ipset.sh` …）。这些文件不属于本补丁的
+> 范围，路线 B 有意不碰它们，所以「注入包 vs 源码构建包」的整包比对本来就不会是 0 差异 ——
+> **判断标准是「载荷文件逐个 sha 一致」**，整包零差异只在路线 A（同版本树）成立。
 
-**真机验证**：`196-r1902` 的 ipk 在 QWRT（aarch64，`opkg`）上 `opkg install` 升级成功，
+**真机验证**：`196-r1902` / `196-r1903` 的 ipk 在 QWRT（aarch64，`opkg`）上 `opkg install` 升级成功，
 `/etc/init.d/shadowsocksr` 与 `usr/share/shadowsocksr/*.sh` 权限均为 `0755`，服务可启动、
 Mihomo 正常运行、面板状态正常（`196-r1901` 因打包丢可执行位，装机后表现为「未运行」）。
 装机建议先备份 `/etc/config/shadowsocksr`。
