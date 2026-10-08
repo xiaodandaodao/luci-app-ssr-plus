@@ -2708,12 +2708,12 @@ msgstr "心跳包发送间隔（单位：秒）"
 
 #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:6
 msgid ""
-"The online upgrade downloads the latest luci-app-ssr-plus package from fw876/"
-"helloworld releases and installs the matching IPK or APK package for this "
-"system."
+"The online upgrade downloads the latest luci-app-ssr-plus package from the "
+"xiaodandaodao/luci-app-ssr-plus GitHub releases and installs the matching IPK "
+"or APK package for this system."
 msgstr ""
-"在线更新会从 fw876/helloworld 发布页下载最新 luci-app-ssr-plus，并根据当前系"
-"统安装匹配的 IPK 或 APK 包。"
+"在线更新会从 xiaodandaodao/luci-app-ssr-plus 发布页下载最新 luci-app-ssr-plus，"
+"并根据当前系统安装匹配的 IPK 或 APK 包。"
 
 #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:10
 msgid ""

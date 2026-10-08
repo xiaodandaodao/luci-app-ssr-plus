@@ -11,7 +11,7 @@
 | 上游仓库 | `https://github.com/fw876/helloworld` |
 | 基线 tag | **v196.19** |
 | 基线 commit | `16617be`（luci-app-ssr-plus: fix legacy SS subscription parsing with Xray） |
-| 包版本 | `luci-app-ssr-plus` `196-r1902`（上游 v196.19 为 `196-r19`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r19 的第 2 版」= `1902`（第 1 版 `1901`） |
+| 包版本 | `luci-app-ssr-plus` `196-r1903`（上游 v196.19 为 `196-r19`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r19 的第 3 版」= `1903`（第 1 版 `1901`，第 2 版 `1902`） |
 | 许可证 | GPL-3.0（随仓库保留上游 `LICENSE` 原文，未改动） |
 
 上游 monorepo 里 `luci-app-ssr-plus/` 是一个子目录，本仓库把它**提升为仓库根**：
@@ -40,12 +40,12 @@
 | `afb3aaf` | 可选 IPv6 流量代理：nftables IPv6 TCP/UDP 规则、AAAA 地址集、国内 IPv6 地址库（默认关闭） |
 | `16617be` | 修复 legacy SS 订阅链接在 Xray 下的解析（整段 Base64 先解码再解析端点） |
 
-冲突裁决：`Makefile` 的 `PKG_RELEASE` 取我们的（同步当时为 `1901`，本版升为 `1902`）；`po/zh_Hans/ssr-plus.po`
+冲突裁决：`Makefile` 的 `PKG_RELEASE` 取我们的（同步当时为 `1901`，现为 `1903`）；`po/zh_Hans/ssr-plus.po`
 两边的新增条目都保留（我们的 Clash 面板文案 + 上游 IPv6/AnyTLS 文案）。
 
-### ①–⑥ 本仓库的改动
+### ①–⑦ 本仓库的改动
 
-以下六批改动：
+以下七批改动：
 
 ### ① 面板延迟可视化
 
@@ -124,6 +124,17 @@ LuCI 侧边栏的独立页面 —— 三处来回跳。现在合并成一个弹�
 > LuCI 显示「ShadowsocksR Plus+ 未运行」、点启动直接 `Permission denied`；
 > `gfw2ipset.sh` / `chinaipset.sh` 同样不可执行，即使手动 chmod 启动也会刷一批 Permission denied 日志。
 > 修复后本仓库与 monorepo 两条打包路线产出的包，init.d 与脚本都是 `0755`。
+
+### ⑦ 主程序在线升级源改指本仓库（1903）
+
+| 文件 | 改动 |
+|---|---|
+| `root/usr/share/shadowsocksr/update_components.sh` | 新增常量 `MAINPROGRAM_REPO="xiaodandaodao/luci-app-ssr-plus"` 与 `get_mainprogram_latest_tag()`；`get_mainprogram_latest_info()` 由「取上游 `fw876/helloworld` 最新 tag + 其 Release 资产」改为「取本仓库最新 Release 的 tag + 资产」，asset 列表解析也放宽为通用 `/owner/repo/releases/download/<tag>/<asset>` 形式 |
+| `luasrc/view/shadowsocksr/component.htm`、`po/zh_Hans/ssr-plus.po`、`po/templates/ssr-plus.pot` | 主程序条目的说明文案由「from fw876/helloworld releases」改为「from the xiaodandaodao/luci-app-ssr-plus GitHub releases」 |
+
+> Xray / Mihomo / NaiveProxy 三个内核的二进制包仍由上游 `fw876/helloworld` Release 提供（本仓库不构建它们），
+> 因此只有主程序这一条的源地址被替换。效果：「组件更新 → SSR Plus+ Main Program → 在线升级」
+> 会从本仓库的 latest Release 取 `luci-app-ssr-plus_<ver>_all.ipk` 或 `luci-app-ssr-plus-<ver>.apk` 并安装。
 
 > 上游 `po/zh-cn/` 目录（同内容、旧命名）未同步改动，属已知差异，不影响 lmo 生成（本仓库用 `po/zh_Hans/`）。
 

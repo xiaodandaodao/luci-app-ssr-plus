@@ -2,7 +2,10 @@
 
 set -u
 
+# Xray/Mihomo/NaiveProxy 的二进制包仍由上游 helloworld Release 提供
 XRAY_RELEASE_PAGE="https://github.com/fw876/helloworld/releases/latest"
+# SSR+ 主程序（luci-app-ssr-plus）：在线升级指向本衍生仓库的 Release
+MAINPROGRAM_REPO="xiaodandaodao/luci-app-ssr-plus"
 XRAY_BINARY="/usr/bin/xray"
 
 # Geo 数据文件 URL
@@ -1011,6 +1014,17 @@ get_helloworld_latest_tag() {
 	printf '%s' "$tag"
 }
 
+# 取本仓库（MAINPROGRAM_REPO）最新 Release 的 tag
+get_mainprogram_latest_tag() {
+	local location tag
+
+	[ -n "$MAINPROGRAM_REPO" ] || return 1
+	location="$(effective_url "https://github.com/$MAINPROGRAM_REPO/releases/latest")" || return 1
+	tag="$(printf '%s' "$location" | sed -n 's#.*/tag/\([^/]*\)$#\1#p' | sed -n '1p')"
+	[ -n "$tag" ] || return 1
+	printf '%s' "$tag"
+}
+
 select_xray_asset() {
 	local asset_list="$1"
 	local pm="$2"
@@ -1266,12 +1280,12 @@ get_mainprogram_latest_info() {
 	local pm release_html tag version asset asset_list url
 
 	pm="$(detect_package_manager)" || return 2
-	tag="$(get_helloworld_latest_tag)" || return 3
-	release_html="$(fetch_text "https://github.com/fw876/helloworld/releases/expanded_assets/$tag")" || return 3
-	asset_list="$(printf '%s\n' "$release_html" | sed -n 's#.*href="/fw876/helloworld/releases/download/[^/]*/\([^"]*\)".*#\1#p')"
+	tag="$(get_mainprogram_latest_tag)" || return 3
+	release_html="$(fetch_text "https://github.com/$MAINPROGRAM_REPO/releases/expanded_assets/$tag")" || return 3
+	asset_list="$(printf '%s\n' "$release_html" | sed -n 's#.*href="/[^/]*/[^/]*/releases/download/[^/]*/\([^"]*\)".*#\1#p')"
 	asset="$(select_mainprogram_asset "$asset_list" "$pm")" || return 4
 	version="$(mainprogram_asset_version "$asset" 2>/dev/null || trim_version "$tag")"
-	url="$(mirror_wrap_url "https://github.com/fw876/helloworld/releases/download/$tag/$asset")"
+	url="$(mirror_wrap_url "https://github.com/$MAINPROGRAM_REPO/releases/download/$tag/$asset")"
 
 	log_kv package_manager "$pm"
 	log_kv arch "$(get_openwrt_arch)"
