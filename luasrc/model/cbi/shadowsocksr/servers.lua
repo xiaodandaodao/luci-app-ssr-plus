@@ -588,27 +588,15 @@ if has_mihomo then
 	o.rmempty = true
 	o:depends("sub_convert", "1")
 
-	o = s:option(Flag, "mihomo_urltest", string.format("<b><span style='color:red;'>%s</span></b>", translate("Mihomo Smart Grouping and Auto Select")))
+	o = s:option(Flag, "mihomo_urltest", string.format("<b><span style='color:red;'>%s</span></b>", translate("Clash Auto Selecting")))
 	o.default = "0"
 	o.rmempty = false
-	o.description = translate("Smart grouping for Mihomo/Clash: when the subscription YAML has no node groups of its own, nodes are grouped by the region found in their names (e.g. Hong Kong 01 / Hong Kong 02 -> China Hong Kong), and every region group automatically uses its fastest node. A global auto-select group over all nodes is added as well. All these group names are inserted into every route group, so a route group can pick a whole region at once. Custom groups can be created from the Group Manager button in the Clash panel. If a node was already selected manually before, press Reset Default Proxies Rules once so Mihomo falls back to the new default.")
+	o.description = translate("Subscription configs are almost all manual selectors: the node you picked stays selected even after it goes down. Turning this on adds one auto group to every selector — same members, but Mihomo keeps picking whichever is fastest. Keep selecting individual nodes freely; choose the auto group in the panel to hand control back to Mihomo.")
 
-	o = s:option(Flag, "mihomo_auto_regions", translate("Region Auto Grouping"))
+	o = s:option(Flag, "mihomo_autoselect_apply", translate("Apply After Start"))
 	o.default = "1"
 	o.rmempty = false
-	o.description = translate("Group nodes by region when the subscription provides no node groups of its own. Turn it off to keep only the global auto-select group.")
-	o:depends("mihomo_urltest", "1")
-
-	o = s:option(Value, "mihomo_auto_regions_min", translate("Region Group Minimum Nodes"))
-	o.default = "2"
-	o.datatype = "uinteger"
-	o.description = translate("A region becomes its own group only when it has at least this many nodes (set 1 so single-node regions are grouped too).")
-	o:depends("mihomo_urltest", "1")
-
-	o = s:option(Value, "mihomo_auto_regions_max", translate("Region Group Maximum Count"))
-	o.default = "60"
-	o.datatype = "uinteger"
-	o.description = translate("Upper limit of generated region groups; the regions with the most nodes are kept.")
+	o.description = translate("Automatically point every selector at its auto group each time the service starts. Turn it off to switch manually in the Proxy Group panel.")
 	o:depends("mihomo_urltest", "1")
 
 	o = s:option(Value, "mihomo_urltest_url", translate("URL-Test Address"))

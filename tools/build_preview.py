@@ -31,32 +31,6 @@ ZH = {
     "Proxy": "代理", "Domestic": "国内", "GlobalTV": "国际流媒体", "AsianTV": "亚洲流媒体",
     "Others": "其他", "GLOBAL": "全局",     "url-test": "自动测速", "fallback": "故障转移",
     "load-balance": "负载均衡", "relay": "中继", "Compatible": "兼容", "Pass": "放行",
-
-    # 分组管理 / 自定义分组（r16+）
-    "Group Manager": "分组管理", "Custom Groups": "自定义分组", "New Group": "新建分组",
-    "Group Name": "分组名称", "e.g. My Hong Kong": "例如：我的香港节点",
-    "Mode": "模式", "Auto (fastest)": "自动（最快）", "Manual": "手动选择",
-    "Select Nodes": "选择节点", "Select All": "全选", "Clear": "清空",
-    "Selected: %d": "已选：%d 个", "%d nodes": "%d 个节点",
-    "No custom groups yet.": "还没有自定义分组。",
-    "No nodes match the filter.": "没有匹配的节点。", "Filter nodes...": "筛选节点…",
-    "Close": "关闭", "Edit": "编辑", "Delete": "删除", "Save": "保存", "Cancel": "取消",
-    "Delete this custom group?": "确定删除这个自定义分组？",
-    "Group name is required.": "请填写分组名称。",
-    "Pick at least one node.": "请至少选择一个节点。",
-    "Custom group saved.": "自定义分组已保存。",
-    "Custom group saved and applied.": "自定义分组已保存并生效。",
-    "Custom group deleted.": "自定义分组已删除。",
-    "Custom group deleted and applied.": "自定义分组已删除并生效。",
-    "Failed to save the custom group.": "保存自定义分组失败。",
-    "Failed to delete the custom group.": "删除自定义分组失败。",
-    "Region auto-grouping is ON": "地区自动分组：已开启",
-    "Region auto-grouping is OFF": "地区自动分组：已关闭",
-    "Nodes are grouped by region (at least %d nodes each); every region group picks its own fastest node, and the group names are added to each route group.":
-        "按地区把节点自动分组（每组至少 %d 个节点）；每个地区组自动选择该地区最快的节点，"
-        "组名会被加入各分流组的成员里，分流组可一次性选中整个地区。",
-    'Turn on "Mihomo Smart Grouping and Auto Select" on the Servers page first.':
-        "请先到「服务器」页开启「Mihomo 智能分组与自动选择」。",
 }
 
 
@@ -165,32 +139,6 @@ def build_mock():
     }
 
 
-# 分组管理弹窗用的节点池 + 已存自定义分组（贴近真实 payload）
-GROUP_NODES = [
-    "节点 HK-01", "节点 HK-02", "节点 HK-03", "节点 SG-01", "节点 SG-02", "节点 SG-03",
-    "节点 JP-01", "节点 JP-02", "节点 JP-03", "节点 TW-01", "节点 TW-02", "节点 KR-01",
-    "节点 KR-02", "节点 US-01", "节点 US-02", "节点 US-03", "节点 UK-01", "节点 UK-02",
-    "节点 DE-01", "节点 DE-02", "节点 FR-01", "节点 FR-02", "节点 NL-01", "节点 CA-01",
-    "节点 CA-02", "节点 AU-01", "节点 AU-02", "节点 IN-01", "节点 BR-01", "节点 BR-02",
-    "节点 ZA-01", "节点 RU-01",
-]
-
-
-def build_group_manager_mock():
-    return {
-        "active": True,
-        "auto_regions": "1",
-        "auto_regions_min": "2",
-        "nodes": GROUP_NODES,
-        "groups": [
-            {"id": "cg1", "name": "港新低延迟", "mode": "auto", "enabled": True,
-             "nodes": ["节点 HK-01", "节点 HK-02", "节点 HK-03", "节点 SG-01", "节点 SG-02", "节点 SG-03"]},
-            {"id": "cg2", "name": "流媒体备用", "mode": "manual", "enabled": True,
-             "nodes": ["节点 JP-01", "节点 US-02", "节点 UK-01"]},
-        ],
-    }
-
-
 PAGE = """<!doctype html>
 <html lang="zh-CN" data-darkmode="false">
 <head>
@@ -230,7 +178,7 @@ __COMPONENT_STYLE__
   <div class="pv-head">
     <div>
       <div class="pv-title">Mihomo 策略组面板</div>
-      <div class="pv-sub">luci-app-ssr-plus 196-r1402 · 静态预览（离线渲染，数据为模拟）</div>
+      <div class="pv-sub">luci-app-ssr-plus 196-r1403 · 静态预览（离线渲染，数据为模拟）</div>
     </div>
     <div class="pv-spacer"></div>
     <button class="pv-toggle" id="pv-theme" type="button">切换深色</button>
@@ -244,8 +192,8 @@ __COMPONENT_STYLE__
     </div>
   </div>
   <div class="pv-note">
-    交互可用：筛选框按组名/节点名实时过滤 · 单组测速 · 全部测速 · 点击节点切换 · 展开/收起长列表 ·
-    点右上「分组管理」可试用地区自动分组状态与自定义分组的增删改。
+    交互可用：筛选框按组名/节点名实时过滤 · 单组测速 · 全部测速 · 点击节点切换 · 展开/收起长列表。
+    自动组（url-test / fallback）会额外显示「自动选择」与「实际出口」两个 chip。
   </div>
 </div>
 
@@ -280,16 +228,11 @@ __COMPONENT_SCRIPT__
     return copy;
   }
 
-  // 分组管理：在内存里模拟一份可增删改的数据
-  var GM = __GM_MOCK_JSON__;
-
   var stubXHR = {
     get: function(url, params, cb) {
       var u = String(url);
       var payload;
-      if (u.indexOf('customGroups') >= 0) {
-        payload = JSON.parse(JSON.stringify(GM));        // 深拷贝，避免被面板改动污染
-      } else if (u.indexOf('delay') >= 0) {
+      if (u.indexOf('delay') >= 0) {
         payload = { success: true, delays: {} };
       } else {
         payload = freshMock();
@@ -297,30 +240,7 @@ __COMPONENT_SCRIPT__
       window.setTimeout(function() { cb(null, payload); }, 160);
     },
     post: function(url, params, cb) {
-      var u = String(url);
-      window.setTimeout(function() {
-        if (u.indexOf('customGroupDelete') >= 0) {
-          GM.groups = GM.groups.filter(function(g) { return g.id !== params.id; });
-          cb(null, { success: true, groups: GM.groups });
-        } else if (u.indexOf('customGroupSave') >= 0) {
-          var nodes = [];
-          Object.keys(params).forEach(function(k) {
-            if (k.indexOf('node_') === 0) { nodes.push(params[k]); }
-          });
-          nodes.sort(function(a, b) {
-            var ia = parseInt(a.replace('node_', ''), 10), ib = parseInt(b.replace('node_', ''), 10);
-            return ia - ib;
-          });
-          var group = { id: params.id || ('cg' + (GM.groups.length + 10)), name: params.name,
-                        mode: params.mode, enabled: params.enabled !== '0', nodes: nodes };
-          var hit = -1;
-          GM.groups.forEach(function(g, i) { if (g.id === group.id) { hit = i; } });
-          if (hit >= 0) { GM.groups[hit] = group; } else { GM.groups.push(group); }
-          cb(null, { success: true, groups: GM.groups });
-        } else {
-          cb(null, { success: true });
-        }
-      }, 120);
+      window.setTimeout(function() { cb(null, { success: true }); }, 120);
     }
   };
 
@@ -332,16 +252,9 @@ __COMPONENT_SCRIPT__
     urls: {
       groups: 'preview://groups',
       switch: 'preview://switch',
-      delayTest: 'preview://delay',
-      customGroups: 'preview://customGroups',
-      customGroupSave: 'preview://customGroupSave',
-      customGroupDelete: 'preview://customGroupDelete'
+      delayTest: 'preview://delay'
     }
   });
-
-  // 测速/切换走本地模拟：延迟随机抖动，让画面动起来
-  var origLoad = ui.load;
-  ui.load = origLoad;
 
   document.getElementById('pv-theme').onclick = function() {
     var html = document.documentElement;
@@ -372,8 +285,7 @@ def main():
 
     page = (PAGE.replace("__COMPONENT_STYLE__", style)
                 .replace("__COMPONENT_SCRIPT__", script)
-                .replace("__MOCK_JSON__", json.dumps(build_mock(), ensure_ascii=False))
-                .replace("__GM_MOCK_JSON__", json.dumps(build_group_manager_mock(), ensure_ascii=False)))
+                .replace("__MOCK_JSON__", json.dumps(build_mock(), ensure_ascii=False)))
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as fh:

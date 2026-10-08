@@ -254,153 +254,53 @@ local function fill_empty_proxy_groups(doc)
 end
 
 -- ---------------------------------------------------------------------------
--- 智能分组：地区分组 + 自定义分组 + url-test 自动选择
+-- 自动切换：给每个 select 组挂一个 url-test 影子组
 --
--- 不少订阅的 Clash YAML 只有一个「大平铺」代理组（成员是全部节点），没有任何节点分组。
--- 这种情况下 url-test 自动选择只能在整个节点池里挑最快，用户没法「按地区自动选最快」。
+-- 机场订阅里几乎清一色是 select（手动选择）组：选中的那个节点即使断了、慢了，
+-- mihomo 也不会替你换一个。真正会自动挑节点的是 url-test（自动选最快）。
 --
--- 开启 mihomo_urltest 后：
---   1) 若 YAML 自带节点分组（存在「成员全是真实节点、且不含全部节点」的组），尊重原样；
---   2) 否则按节点名识别地区（香港01 / 香港02 → 中国香港），为每个地区生成一个 url-test 组
---      —— 组内自动选最快，用户只需在分流组里选「地区」即可；
---   3) 生成「🚀 自动选择（全部节点）」组，保留全池自动选最快的能力；
---   4) 读取 uci 里的自定义分组（custom_group section），同样生成组；
---   5) 把上述新组名插入每个 select 分流组的成员列表（真实节点之前），
---      于是每个分流组既能直接选地区，也能选自定义组。
+-- 开启后，为每个 select 组生成一个「成员相同」的 url-test 影子组，放回原组的
+-- 成员列表里。面板上选它就交给 mihomo 自动；继续手选任意节点也照旧，两头都不丢。
 -- ---------------------------------------------------------------------------
 
 local URLTEST_DEFAULT_URL = "https://www.gstatic.com/generate_204"
-local AUTO_SELECT_GROUP_NAME = "🚀 自动选择（全部节点）"
-local REGION_FALLBACK_NAME = "🌐 其他"
+local AUTOSELECT_PREFIX = "♻️ "
 
--- 地区识别表：{ 显示名, 关键词(逗号分隔) }
--- 匹配时统一按「关键词长度降序」进行，长词优先，避免 US 命中 RUSSIA、IN 命中 Finland；
--- 纯 ASCII 关键词要求词边界，避免 IN 命中 Haidian、US 命中 Russia 这类误判。
-local REGION_DEFS = {
-	{ "🇨🇳 中国香港", "中国香港,香港,港区,港岛,九龙,新界,HongKong,Hong Kong,HKG,HK" },
-	{ "🇨🇳 中国台湾", "中国台湾,台湾,台北,新北,台中,台南,高雄,彰化,Taiwan,Taipei,TW" },
-	{ "🇨🇳 中国澳门", "中国澳门,澳门,Macau,Macao,MO" },
-	{ "🇯🇵 日本", "日本,东京,大阪,埼玉,名古屋,Japan,Tokyo,Osaka,JP" },
-	{ "🇰🇷 韩国", "韩国,首尔,韩区,Korea,Seoul,KR" },
-	{ "🇸🇬 新加坡", "新加坡,狮城,Singapore,SG" },
-	{ "🇺🇸 美国", "美国,洛杉矶,圣何塞,硅谷,西雅图,达拉斯,芝加哥,迈阿密,拉斯维加斯,凤凰城,纽约,United States,UnitedStates,LosAngeles,SanJose,Seattle,NewYork,Dallas,USA,US" },
-	{ "🇬🇧 英国", "英国,伦敦,曼彻斯特,United Kingdom,Britain,London,GB,UK" },
-	{ "🇩🇪 德国", "德国,法兰克福,柏林,Germany,Frankfurt,Berlin,DE" },
-	{ "🇫🇷 法国", "法国,巴黎,France,Paris,FR" },
-	{ "🇳🇱 荷兰", "荷兰,阿姆斯特丹,Netherlands,Amsterdam,NL" },
-	{ "🇮🇹 意大利", "意大利,米兰,罗马,Italy,Milan,Rome,IT" },
-	{ "🇪🇸 西班牙", "西班牙,马德里,Spain,Madrid,ES" },
-	{ "🇹🇷 土耳其", "土耳其,伊斯坦布尔,Turkey,Istanbul,TR" },
-	{ "🇷🇺 俄罗斯", "俄罗斯,莫斯科,俄区,Russia,Moscow,RU" },
-	{ "🇨🇦 加拿大", "加拿大,多伦多,蒙特利尔,Canada,Toronto,CA" },
-	{ "🇦🇺 澳大利亚", "澳大利亚,澳洲,悉尼,墨尔本,Australia,Sydney,Melbourne,AU" },
-	{ "🇲🇾 马来西亚", "马来西亚,马来,吉隆坡,Malaysia,KualaLumpur,MY" },
-	{ "🇵🇭 菲律宾", "菲律宾,马尼拉,Philippines,Manila,PH" },
-	{ "🇮🇳 印度", "印度,孟买,班加罗尔,India,Mumbai,Bangalore,IN" },
-	{ "🇮🇩 印尼", "印度尼西亚,印尼,雅加达,Indonesia,Jakarta,ID" },
-	{ "🇹🇭 泰国", "泰国,曼谷,Thailand,Bangkok,TH" },
-	{ "🇻🇳 越南", "越南,河内,胡志明,Vietnam,Hanoi,VN" },
-	{ "🇧🇷 巴西", "巴西,圣保罗,Brazil,SaoPaulo,BR" },
-	{ "🇦🇷 阿根廷", "阿根廷,Argentina,AR" },
-	{ "🇲🇽 墨西哥", "墨西哥,Mexico,MX" },
-	{ "🇦🇪 迪拜", "迪拜,阿联酋,酋长国,Dubai,Emirates,UAE,AE" },
-	{ "🇪🇬 埃及", "埃及,Egypt,EG" },
-	{ "🇮🇱 以色列", "以色列,Israel,IL" },
-	{ "🇨🇭 瑞士", "瑞士,苏黎世,Switzerland,Zurich,CH" },
-	{ "🇸🇪 瑞典", "瑞典,斯德哥尔摩,Sweden,Stockholm,SE" },
-	{ "🇫🇮 芬兰", "芬兰,赫尔辛基,Finland,Helsinki,FI" },
-	{ "🇳🇴 挪威", "挪威,Norway,Oslo,NO" },
-	{ "🇩🇰 丹麦", "丹麦,Denmark,Copenhagen,DK" },
-	{ "🇵🇱 波兰", "波兰,华沙,Poland,Warsaw,PL" },
-	{ "🇺🇦 乌克兰", "乌克兰,Ukraine,Kyiv,Kiev,UA" },
-	{ "🇮🇪 爱尔兰", "爱尔兰,都柏林,Ireland,Dublin,IE" },
-	{ "🇦🇹 奥地利", "奥地利,维也纳,Austria,Vienna,AT" },
-	{ "🇧🇪 比利时", "比利时,Belgium,Brussels,BE" },
-	{ "🇨🇿 捷克", "捷克,Czech,Prague,CZ" },
-	{ "🇷🇴 罗马尼亚", "罗马尼亚,Romania,Bucharest,RO" },
-	{ "🇭🇺 匈牙利", "匈牙利,Hungary,Budapest,HU" },
-	{ "🇬🇷 希腊", "希腊,Greece,Athens,GR" },
-	{ "🇵🇹 葡萄牙", "葡萄牙,里斯本,Portugal,Lisbon,PT" },
-	{ "🇿🇦 南非", "南非,约翰内斯堡,SouthAfrica,Johannesburg,ZA" },
-	{ "🇨🇱 智利", "智利,Chile,Santiago,CL" },
-	{ "🇵🇪 秘鲁", "秘鲁,Peru,Lima,PE" },
-	{ "🇨🇴 哥伦比亚", "哥伦比亚,Colombia,Bogota,CO" },
-	{ "🇵🇰 巴基斯坦", "巴基斯坦,Pakistan,Karachi,PK" },
-	{ "🇳🇬 尼日利亚", "尼日利亚,Nigeria,Lagos,NG" },
-	{ "🇳🇿 新西兰", "新西兰,奥克兰,NewZealand,Auckland,NZ" },
-	{ "🇸🇦 沙特", "沙特,利雅得,Saudi,Riyadh,SA" },
-	{ "🇰🇿 哈萨克斯坦", "哈萨克,哈萨克斯坦,Kazakhstan,KZ" },
-	{ "🇲🇳 蒙古", "蒙古,Mongolia,MN" },
-	{ "🇰🇭 柬埔寨", "柬埔寨,金边,Cambodia,KH" },
-	{ "🇲🇲 缅甸", "缅甸,仰光,Myanmar,Yangon,MM" },
-	{ "🇳🇵 尼泊尔", "尼泊尔,Nepal,NP" },
-	{ "🇱🇰 斯里兰卡", "斯里兰卡,SriLanka,LK" },
-	{ "🇧🇩 孟加拉", "孟加拉,Bangladesh,BD" },
-	{ "🇨🇳 中国", "回国,大陆,上海,北京,广州,深圳,杭州,成都,重庆,武汉,南京,天津,苏州,China,CN" },
-	{ REGION_FALLBACK_NAME, "" }
+-- url-test 里不能出现的东西：它们要么不是节点，要么永远「最快」
+local NON_SELECTABLE_TYPES = {
+	direct = true, reject = true, ["reject-drop"] = true,
+	pass = true, dns = true, compat = true, ssh = true
+}
+local RESERVED_NAMES = { DIRECT = true, REJECT = true, PASS = true, GLOBAL = true }
+
+-- 订阅里的「伪节点」：显示剩余流量 / 到期时间，本地秒回，混进去必被选中
+local INFO_NAME_PATTERNS = {
+	"^traffic[%s:：]", "^expire[%s:：]", "^剩余流量", "^到期",
+	"^套餐", "^官网", "^公告", "^节点", "^tg群", "^群"
 }
 
--- 一次性把 REGION_DEFS 展开成「关键词 → 地区」的有序匹配表
-local REGION_MATCHERS = (function()
-	local list = {}
-	local seq = 0
-	for order, def in ipairs(REGION_DEFS) do
-		for keyword in tostring(def[2] or ""):gmatch("[^,]+") do
-			keyword = trim(keyword)
-			if keyword ~= "" then
-				seq = seq + 1
-				list[#list + 1] = {
-					kw = keyword,
-					low = keyword:lower(),
-					ascii = keyword:match("^[%a%d]+$") ~= nil,
-					name = def[1],
-					order = order,
-					seq = seq
-				}
-			end
+local function urlencode(str)
+	return (tostring(str):gsub("[^%w%-_%.~]", function(ch)
+		return string.format("%%%02X", string.byte(ch))
+	end))
+end
+
+-- 判断某个成员能不能进 url-test 组
+local function selectable_member(name, proxy_types)
+	if RESERVED_NAMES[name] then
+		return false
+	end
+	local ptype = proxy_types[name]
+	if ptype ~= "" and NON_SELECTABLE_TYPES[ptype] then
+		return false
+	end
+	local lower = name:lower()
+	for _, pattern in ipairs(INFO_NAME_PATTERNS) do
+		if lower:find(pattern) then
+			return false
 		end
 	end
-	table.sort(list, function(a, b)
-		if #a.kw ~= #b.kw then
-			return #a.kw > #b.kw
-		end
-		if a.order ~= b.order then
-			return a.order < b.order
-		end
-		return a.seq < b.seq
-	end)
-	return list
-end)()
-
--- 从节点名推断地区显示名；识别不到返回 nil
-local function region_of(name)
-	local raw = tostring(name or "")
-	if raw == "" then
-		return nil
-	end
-	local low = raw:lower()
-
-	for _, item in ipairs(REGION_MATCHERS) do
-		if item.ascii then
-			local from = 1
-			while true do
-				local s, e = low:find(item.low, from, true)
-				if not s then
-					break
-				end
-				local before = s > 1 and low:sub(s - 1, s - 1) or ""
-				local after = low:sub(e + 1, e + 1)
-				if not before:match("[%a%d]") and not after:match("[%a%d]") then
-					return item.name
-				end
-				from = s + 1
-			end
-		elseif low:find(item.low, 1, true) then
-			return item.name
-		end
-	end
-
-	return nil
+	return true
 end
 
 local function uci_subscribe_option(option, default)
@@ -492,276 +392,77 @@ local function make_unique_name(base, used)
 	return unique
 end
 
--- YAML 是否已经自带节点分组：存在一个「成员全是真实节点、且不是全部节点」的组
-local function has_node_subgroups(doc, proxy_names)
-	local total = 0
-	for _ in pairs(proxy_names) do
-		total = total + 1
-	end
-	if total < 4 then
-		return false
-	end
-
-	for _, group in ipairs(doc["proxy-groups"] or {}) do
-		if type(group) == "table" and type(group.proxies) == "table" then
-			local count = #group.proxies
-			if count >= 2 and count < total then
-				local all_nodes = true
-				for _, member in ipairs(group.proxies) do
-					if not proxy_names[tostring(member or "")] then
-						all_nodes = false
-						break
-					end
-				end
-				if all_nodes then
-					return true
-				end
-			end
-		end
-	end
-
-	return false
-end
-
--- 分组配置：mihomo_urltest 是总开关，mihomo_auto_regions 控制地区自动分组
-local function get_smart_group_options()
-	local urltest = get_urltest_options()
-	if not urltest then
-		return nil
-	end
-
-	local min_nodes = tonumber(uci_subscribe_option("mihomo_auto_regions_min", "2")) or 2
-	if min_nodes < 1 then
-		min_nodes = 1
-	end
-
-	local max_groups = tonumber(uci_subscribe_option("mihomo_auto_regions_max", "60")) or 60
-	if max_groups < 1 then
-		max_groups = 1
-	end
-
-	return {
-		urltest = urltest,
-		auto_regions = tostring(uci_subscribe_option("mihomo_auto_regions", "1")) == "1",
-		min_nodes = min_nodes,
-		max_groups = max_groups
-	}
-end
-
--- 读取 uci 里的自定义分组（config custom_group）
-local function read_custom_groups()
-	local list = {}
-	local all = uci:get_all("shadowsocksr") or {}
-
-	for _, section in pairs(all) do
-		if type(section) == "table" and tostring(section[".type"] or "") == "custom_group" then
-			local name = trim(section.name)
-			if name ~= "" and tostring(section.enabled or "1") ~= "0" then
-				local nodes = {}
-				for part in tostring(section.nodes or ""):gmatch("[^,]+") do
-					local value = trim(part)
-					if value ~= "" then
-						nodes[#nodes + 1] = value
-					end
-				end
-				if #nodes > 0 then
-					list[#list + 1] = {
-						name = name,
-						nodes = nodes,
-						mode = (tostring(section.mode or "auto") == "manual") and "manual" or "auto"
-					}
-				end
-			end
-		end
-	end
-
-	table.sort(list, function(a, b)
-		return tostring(a.name) < tostring(b.name)
-	end)
-
-	return list
-end
-
--- 按地区把节点分桶（沿用 YAML 里节点的原始顺序）
-local function collect_region_buckets(doc, proxy_names, min_nodes, max_groups)
-	local buckets = {}
-	local order = {}
-
+local function collect_proxy_types(doc)
+	local types = {}
 	for _, proxy in ipairs(doc.proxies or {}) do
 		if type(proxy) == "table" then
 			local name = tostring(proxy.name or "")
-			if name ~= "" and proxy_names[name] then
-				local region = region_of(name) or REGION_FALLBACK_NAME
-				if not buckets[region] then
-					buckets[region] = {}
-					order[#order + 1] = region
-				end
-				table.insert(buckets[region], name)
+			if name ~= "" then
+				types[name] = tostring(proxy.type or ""):lower()
 			end
 		end
 	end
-
-	local list = {}
-	for _, region in ipairs(order) do
-		local members = buckets[region]
-		if #members >= min_nodes then
-			list[#list + 1] = { name = region, members = members }
-		end
-	end
-
-	-- 节点多的地区排前面
-	table.sort(list, function(a, b)
-		if #a.members ~= #b.members then
-			return #a.members > #b.members
-		end
-		return tostring(a.name) < tostring(b.name)
-	end)
-
-	if #list > max_groups then
-		local trimmed = {}
-		for index = 1, max_groups do
-			trimmed[index] = list[index]
-		end
-		list = trimmed
-	end
-
-	return list
+	return types
 end
 
-local function inject_smart_groups(doc)
-	local smart = get_smart_group_options()
-	if not smart then
-		return 0, 0
+-- ---------------------------------------------------------------------------
+-- 为每个 select 组生成「成员相同」的 url-test 影子组，放回原组成员列表首位。
+-- 返回：注入个数、映射表 { {group=原组名, target=影子组名} }
+-- ---------------------------------------------------------------------------
+local function inject_autoselect_groups(doc)
+	if not get_urltest_options() then
+		return 0, {}
 	end
 
 	local groups = doc["proxy-groups"]
 	if type(groups) ~= "table" or #groups == 0 then
-		return 0, 0
+		return 0, {}
 	end
 
-	local proxy_names = collect_proxy_names(doc)
-	local total_nodes = 0
-	for _ in pairs(proxy_names) do
-		total_nodes = total_nodes + 1
-	end
-	if total_nodes < 2 then
-		return 0, 0
-	end
-
+	local urltest = get_urltest_options()
+	local proxy_types = collect_proxy_types(doc)
 	local used = collect_used_names(doc)
-	local added_groups = {}
-	local region_count = 0
+	local added = {}
+	local mapping = {}
 
-	local function copy_members(members)
-		-- 拷贝一份，避免多张表共享同一张表让 lyaml 输出 YAML 锚点/别名
-		local copied = {}
-		for index, member in ipairs(members) do
-			copied[index] = member
-		end
-		return copied
-	end
-
-	local function add_group(base_name, gtype, members, extra)
-		local group = {
-			name = make_unique_name(base_name, used),
-			type = gtype,
-			proxies = copy_members(members)
-		}
-		if extra then
-			for key, value in pairs(extra) do
-				group[key] = value
-			end
-		end
-		added_groups[#added_groups + 1] = group
-		return group
-	end
-
-	local autotest_extra = {
-		url = smart.urltest.url,
-		interval = smart.urltest.interval,
-		tolerance = smart.urltest.tolerance
-	}
-
-	-- 1) 地区自动分组：只在 YAML 没有自带节点分组时启用
-	if smart.auto_regions and not has_node_subgroups(doc, proxy_names) then
-		for _, bucket in ipairs(collect_region_buckets(doc, proxy_names, smart.min_nodes, smart.max_groups)) do
-			add_group(bucket.name, "url-test", bucket.members, autotest_extra)
-			region_count = region_count + 1
-		end
-	end
-
-	-- 2) 自定义分组
-	for _, custom in ipairs(read_custom_groups()) do
-		local members = {}
-		for _, node in ipairs(custom.nodes) do
-			if proxy_names[node] then
-				members[#members + 1] = node
-			end
-		end
-		if #members > 0 then
-			if custom.mode == "manual" or #members < 2 then
-				add_group(custom.name, "select", members)
-			else
-				add_group(custom.name, "url-test", members, autotest_extra)
-			end
-		end
-	end
-
-	-- 3) 全局自动选择（全部节点）
-	local all_nodes = {}
-	for _, proxy in ipairs(doc.proxies or {}) do
-		if type(proxy) == "table" then
-			local name = tostring(proxy.name or "")
-			if name ~= "" and proxy_names[name] then
-				all_nodes[#all_nodes + 1] = name
-			end
-		end
-	end
-	if #all_nodes >= 2 then
-		add_group(AUTO_SELECT_GROUP_NAME, "url-test", all_nodes, autotest_extra)
-	end
-
-	if #added_groups == 0 then
-		return 0, 0
-	end
-
-	local added_names = {}
-	for _, group in ipairs(added_groups) do
-		added_names[#added_names + 1] = group.name
-	end
-
-	-- 4) 把新组名插进每个 select 分流组（放在第一个真实节点之前）
 	for _, group in ipairs(groups) do
 		if type(group) == "table"
 			and tostring(group.type or ""):lower() == "select"
 			and type(group.proxies) == "table"
 			and not has_nonempty_sequence(group.use)
 		then
-			local at = nil
-			local existing = {}
-			for index, member in ipairs(group.proxies) do
+			local self_name = tostring(group.name or "")
+			local members = {}
+			for _, member in ipairs(group.proxies) do
 				local name = tostring(member or "")
-				existing[name] = true
-				if not at and proxy_names[name] then
-					at = index
+				if name ~= "" and name ~= self_name and selectable_member(name, proxy_types) then
+					members[#members + 1] = name
 				end
 			end
-			if at then
-				local offset = 0
-				for _, name in ipairs(added_names) do
-					if name ~= group.name and not existing[name] then
-						offset = offset + 1
-						table.insert(group.proxies, at + offset - 1, name)
-						existing[name] = true
-					end
-				end
+			-- 只剩一个候选就没得「自动」了
+			if #members >= 2 then
+				local shadow = {
+					name = make_unique_name(AUTOSELECT_PREFIX .. self_name, used),
+					type = "url-test",
+					url = urltest.url,
+					interval = urltest.interval,
+					tolerance = urltest.tolerance,
+					proxies = members
+				}
+				added[#added + 1] = shadow
+				mapping[#mapping + 1] = { group = self_name, target = shadow.name }
+				table.insert(group.proxies, 1, shadow.name)
 			end
 		end
 	end
 
-	-- 5) 新组统一插到 proxy-groups 最前面，方便在面板里一眼看到
+	if #added == 0 then
+		return 0, {}
+	end
+
+	-- 影子组排在最前，面板里一眼能看到
 	local result = {}
-	for _, group in ipairs(added_groups) do
+	for _, group in ipairs(added) do
 		result[#result + 1] = group
 	end
 	for _, group in ipairs(groups) do
@@ -769,7 +470,30 @@ local function inject_smart_groups(doc)
 	end
 	doc["proxy-groups"] = result
 
-	return #added_groups, region_count
+	return #added, mapping
+end
+
+-- 把 group -> 影子组 的对应关系写成 TSV，供 init.d 在启动后调用 API 应用。
+-- 三列：<urlencoded 原组名> \t <urlencoded 影子组名> \t <影子组原名>
+local function write_autoselect_map(output_path, mapping)
+	if type(mapping) ~= "table" or #mapping == 0 then
+		return 0
+	end
+	if tostring(uci_subscribe_option("mihomo_autoselect_apply", "1")) ~= "1" then
+		return 0
+	end
+
+	local dir = tostring(output_path):match("^.*/") or ""
+	local lines = {}
+	for _, item in ipairs(mapping) do
+		lines[#lines + 1] = table.concat({
+			urlencode(item.group),
+			urlencode(item.target),
+			item.target
+		}, "\t")
+	end
+	write_file(dir .. "autoselect.map", table.concat(lines, "\n") .. "\n")
+	return #mapping
 end
 
 local function strip_incompatible_script_rules(doc)
@@ -841,7 +565,7 @@ local function merge(raw_path, overlay_path, output_path)
 	strip_runtime_conflicts(raw_doc)
 	local filled_groups = fill_empty_proxy_groups(raw_doc)
 	local stripped_rules = strip_incompatible_script_rules(raw_doc)
-	local injected_groups, injected_regions = inject_smart_groups(raw_doc)
+	local injected_groups, autoselect_mapping = inject_autoselect_groups(raw_doc)
 	local merged = deep_merge(raw_doc, overlay_doc)
 	local ok, rendered = pcall(lyaml.dump, { merged })
 	if not ok or not rendered then
@@ -850,9 +574,10 @@ local function merge(raw_path, overlay_path, output_path)
 	end
 
 	write_file(output_path, rendered)
+	local injected_applied = write_autoselect_map(output_path, autoselect_mapping)
 	io.stdout:write(string.format(
-		"filled_groups=%d stripped_script_rules=%d injected_urltest=%d injected_regions=%d\n",
-		filled_groups, stripped_rules, injected_groups, injected_regions))
+		"filled_groups=%d stripped_script_rules=%d injected_autoselect=%d injected_applied=%d\n",
+		filled_groups, stripped_rules, injected_groups, injected_applied))
 	return true
 end
 

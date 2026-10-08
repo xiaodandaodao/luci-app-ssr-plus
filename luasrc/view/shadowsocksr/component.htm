@@ -166,14 +166,17 @@
 			action.innerHTML = doUpgrade ? '<%:Processing...%>' : '';
 		}
 
-		XHR.get(url, { component: component, mirror: mirror }, function(x, rv) {
-			renderComponentInfo(rv, true);
-			if (button) {
-				button.disabled = false;
-				button.value = doUpgrade ? '<%:Upgrade%>' : '<%:Check Update%>';
-			}
-		});
-	}
+	XHR.get(url, { component: component, mirror: mirror }, function(x, rv) {
+		renderComponentInfo(rv, true);
+		if (button) {
+			button.disabled = false;
+			button.value = doUpgrade ? '<%:Upgrade%>' : '<%:Check Update%>';
+		}
+		if (doUpgrade && rv && rv.success && typeof window.ssrComponentPostUpgrade === 'function') {
+			window.ssrComponentPostUpgrade(component, rv);
+		}
+	});
+}
 
 	function queryLocalComponentInfo() {
 		var action = document.getElementById('component-action');
@@ -319,14 +322,17 @@
 			action.innerHTML = doUpgrade ? '<%:Processing...%>' : '';
 		}
 
-		XHR.get(url, { component: component, mirror: mirror }, function(x, rv) {
-			renderGeoInfo(rv, true);
-			if (button) {
-				button.disabled = false;
-				button.value = doUpgrade ? '<%:Upgrade%>' : '<%:Check Update%>';
-			}
-		});
-	}
+	XHR.get(url, { component: component, mirror: mirror }, function(x, rv) {
+		renderGeoInfo(rv, true);
+		if (button) {
+			button.disabled = false;
+			button.value = doUpgrade ? '<%:Upgrade%>' : '<%:Check Update%>';
+		}
+		if (doUpgrade && rv && rv.success && typeof window.ssrComponentPostUpgrade === 'function') {
+			window.ssrComponentPostUpgrade(component, rv);
+		}
+	});
+}
 
 	function queryLocalGeoInfo() {
 		var action = document.getElementById('geo-action');
@@ -354,9 +360,17 @@
 		return geoMeta[component] ? geoMeta[component].help : '';
 	}
 
-	window.setTimeout(function() {
+	// 独立页：进来就加载；被 Clash 面板内嵌时（window.ssrComponentLazy = true）
+	// 由面板在切到「组件更新」页签时调用 window.ssrComponentInit()，避免无谓的请求。
+	window.ssrComponentInit = function() {
 		onComponentChange();
-		loadGeoComponent()
+		loadGeoComponent();
+	};
+
+	window.setTimeout(function() {
+		if (!window.ssrComponentLazy) {
+			window.ssrComponentInit();
+		}
 	}, 0);
 //]]>
 </script>

@@ -11,7 +11,7 @@
 | 上游仓库 | `https://github.com/fw876/helloworld` |
 | 基线 tag | **v196.14** |
 | 基线 commit | `99a83b4`（mihomo: enable UPX best compression by default） |
-| 包版本 | `luci-app-ssr-plus` `196-r1402`（上游 v196.14 为 `196-r14`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r14 的第 1 版」= `1401` |
+| 包版本 | `luci-app-ssr-plus` `196-r1403`（上游 v196.14 为 `196-r14`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r14 的第 1 版」= `1401` |
 | 许可证 | GPL-3.0（随仓库保留上游 `LICENSE` 原文，未改动） |
 
 上游 monorepo 里 `luci-app-ssr-plus/` 是一个子目录，本仓库把它**提升为仓库根**：
@@ -38,28 +38,53 @@
 | `luasrc/view/shadowsocksr/clash_main_panel.htm` | 引入上述组件 + 注入 `urls:{}` |
 | `luasrc/view/shadowsocksr/clash_panel.htm` | 同上（独立页面版） |
 
-### ② url-test 自动选最快节点
+### ② 自动切换：给每个选择器挂一个 url-test 影子组（1403 重写）
+
+订阅里的策略组几乎清一色是 `select`（手动选择）—— 选中的那个节点即使断了、慢了，mihomo 也不会
+替你换一个。开启后，为每个 `select` 组生成一个成员相同的 `url-test` 影子组，放回原组成员列表首位，
+于是面板上选它就交给 mihomo 自动挑最快；继续手选任意节点也照旧。
 
 | 文件 | 改动 |
 |---|---|
-| `root/usr/share/shadowsocksr/clash_yaml.lua` | 为每个叶子组生成 url-test 孪生组并置顶（幂等），开关 `mihomo_urltest`（默认关） |
-| `luasrc/model/cbi/shadowsocksr/servers.lua` | 新增开关选项及说明 |
-| `root/usr/share/shadowsocksr/shadowsocksr.config` | 新增选项默认值 |
+| `root/usr/share/shadowsocksr/clash_yaml.lua` | 核心：`inject_autoselect_groups()` + `write_autoselect_map()`。成员过滤掉 `DIRECT` / `REJECT` / `PASS` 与机场常见的「剩余流量 / 到期时间」伪节点（它们本地秒回，混进 url-test 必然被选中）；有效成员不足 2 个的组跳过；`♻️ <组名>` 形式的影子组排在最前 |
+| `root/etc/init.d/shadowsocksr` | 新增 `apply_clash_autoselect()`：mihomo 启动后等 external-controller 就绪，按映射表逐个 `PUT /proxies/<group>` 切到自动组；组名（含中文/emoji）预先百分号编码。任何一步失败只记日志，不影响已经起来的代理 |
+| `luasrc/model/cbi/shadowsocksr/servers.lua` | `mihomo_urltest` 改称「Clash 自动切换」；新增 `mihomo_autoselect_apply`（每次启动后自动应用，默认开） |
+| `root/usr/share/shadowsocksr/shadowsocksr.config` | 新增 `mihomo_autoselect_apply` 默认值，移除 `mihomo_auto_regions*` |
+| `po/zh_Hans/ssr-plus.po` | 文案更新 |
+| `Makefile` | `PKG_RELEASE` `1402` → `1403`（编码规则见 §1） |
 
-### ③ 智能地区分组 + 自定义分组
+### ③ 精简：移除智能地区分组与自定义分组（1403）
+
+地区识别本就该由 subconverter 干，塞在路由器脚本里既臃肿又难维护（约 500 行地区关键词表）。
+按「能精简就精简」的原则整体下线，代码可从 git 历史找回：
+
+* `root/usr/share/shadowsocksr/clash_yaml.lua`：`REGION_DEFS` / `REGION_MATCHERS` / `region_of()` /
+  `has_node_subgroups()` / `read_custom_groups()` / `collect_region_buckets()` / `inject_smart_groups()`
+* `luasrc/controller/shadowsocksr.lua`：`clash_custom_groups` / `clash_custom_group_save` /
+  `clash_custom_group_delete` 三个 RPC 及 uci `custom_group` 相关读写
+* `luasrc/view/shadowsocksr/clash_groups_ui.htm`：「分组管理」弹窗与配套样式
+* `po/zh_Hans/ssr-plus.po`：清理失效条目
+
+累计净减约 1200 行；`clash_groups_ui.htm` 从 1851 行降到约 1230 行。
+
+### ④ 统一 Clash 面板：左侧三页签（1403）
+
+原来「Mihomo 面板」弹窗只有策略组一块内容，客户端规则要从主页面另一个按钮进，组件更新则是
+LuCI 侧边栏的独立页面 —— 三处来回跳。现在合并成一个弹窗，左侧导航只保留三项：
+**代理组 / 客户端规则 / 组件更新**（不做 URL 过滤、证书管理等与 Mihomo 面板无关的入口）。
 
 | 文件 | 改动 |
 |---|---|
-| `root/usr/share/shadowsocksr/clash_yaml.lua` | 核心：`inject_smart_groups()` / `REGION_DEFS` / `region_of()` / `has_node_subgroups()`。订阅 YAML 未自带节点分组时，按节点名里的地区关键词自动生成地区 url-test 组 + 全局自动选择组，并把组名注入各 select 分流组（ASCII 关键词按词边界匹配，中文按子串） |
-| `luasrc/controller/shadowsocksr.lua` | 新增 `clash_custom_groups` / `clash_custom_group_save` / `clash_custom_group_delete` 三个 RPC，写 uci `custom_group` 并触发重启/reapply |
-| `luasrc/view/shadowsocksr/clash_groups_ui.htm` | 工具栏新增「分组管理」：新建/编辑/删除分组（组名 + 节点多选 + 自动/手动模式），并显示地区分组运行状态 |
-| `luasrc/model/cbi/shadowsocksr/servers.lua` | `mihomo_urltest` 重命名为「Mihomo 智能分组与自动选择」；新增 `mihomo_auto_regions`(默认 1) / `mihomo_auto_regions_min`(2) / `mihomo_auto_regions_max`(60) |
-| `root/etc/init.d/shadowsocksr` | `prepare_clash_runtime_config()` 中调用 + 日志 |
-| `root/usr/share/shadowsocksr/shadowsocksr.config` | 新增选项默认值 |
-| `po/zh_Hans/ssr-plus.po` | 新增文案翻译 |
-| `Makefile` | `PKG_RELEASE` `16` → `1402`（编码规则见 §1） |
+| `luasrc/view/shadowsocksr/clash_main_panel.htm` | 弹窗主体改为「左导航 + 右页签」两栏：`PANES` / `MODE_BUTTONS` / `MODE_LOADERS` 三个表驱动切换，标题栏按钮跟着页签走（只有规则页显示 新增/导入/导出/清空/保存）。窄屏（≤900px）自动退化成顶部横排 |
+| 同上 | 组件更新页签直接 `<%+shadowsocksr/component%>` 复用现有页面，**不复制代码**；配套 CSS 把它套进 `scui` 设计变量，与卡片流观感一致、跟随明暗主题 |
+| `luasrc/view/shadowsocksr/component.htm` | 增加懒加载：`window.ssrComponentLazy` 为真时不自动请求，改由面板在切到该页签时调 `window.ssrComponentInit()`；升级回调末尾挂 `window.ssrComponentPostUpgrade` 钩子 |
 
-### ④ 排障增强（1402）
+**保存后即时生效**：客户端规则保存 / 清空时，若该节点正是当前主节点，后端本来就会
+`/etc/init.d/shadowsocksr restart`（`reapplied` 字段回传给前端显示「已保存并生效」）。
+组件升级完成后走同一个钩子自动 reload —— 内核（xray / mihomo / naiveproxy）与 Geo 库
+调 `clash_refresh` 重载服务，主程序（LuCI 包）则刷新页面。
+
+### ⑤ 排障增强（1402）
 
 | 文件 | 改动 |
 |---|---|

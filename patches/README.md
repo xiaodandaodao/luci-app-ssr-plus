@@ -3,16 +3,17 @@
 本目录提供**两条互不依赖的路线**，用来在「不是从本项目源码构建」的
 `luci-app-ssr-plus` 上获得这些功能：
 
-* Mihomo **智能分组**：订阅 YAML 没自带节点分组时，按节点名里的地区自动分地区组
-* **自定义分组**：面板里手动建组、挑节点，并可作用到各分流组
-* （顺带包含）url-test 自动选最快节点、策略组面板延迟可视化
+* **自动切换**：给订阅里每个 `select` 选择器挂一个成员相同的 `url-test` 影子组，
+  让 mihomo 持续挑选最快的节点（订阅里的选择器本身是永不自动变的）
+* 策略组面板延迟可视化：自动选择 / 当前选中 / 实际出口节点 + 成员延迟 chip + 测速
+* 排障增强：mihomo 启动失败不再静默、geo 数据升级自动建目标目录
 
 | 路线 | 适用场景 | 需要什么 |
 |---|---|---|
 | **A. 源码补丁** `ssrplus-local-changes.patch` | 能拿到 helloworld 源码 | 源码树 + 打包环境 |
 | **B. 注入预编译包** `../payload/` + `../tools/inject_pkg.py` | **拿不到源码**（别人发布的闭源/预编译 ipk、apk） | 只要那个包本身 |
 
-两条路线产出的包，内容与从本项目源码直接构建的 `196-r1402` **完全一致**（见下文验证）。
+两条路线产出的包，内容与从本项目源码直接构建的 `196-r1403` **完全一致**（见下文验证）。
 
 ---
 
@@ -42,19 +43,19 @@ cd /path/to/ssrplus-local-build
 
 | 文件 | 作用 |
 |---|---|
-| `root/usr/share/shadowsocksr/clash_yaml.lua` | 地区识别表 `REGION_DEFS` / `region_of()`，`inject_smart_groups()` 生成地区组、全局自动选择组、自定义组，并注入各分流组 |
-| `luasrc/controller/shadowsocksr.lua` | 自定义分组 CRUD 的 RPC（`clash_custom_groups` / `_save` / `_delete`）、延迟测试等 |
-| `luasrc/view/shadowsocksr/clash_groups_ui.htm` | **新增**：策略组面板前端组件（分组管理弹窗就在这里） |
+| `root/usr/share/shadowsocksr/clash_yaml.lua` | `inject_autoselect_groups()` 给每个 `select` 组生成 `url-test` 影子组（过滤 DIRECT/REJECT/伪节点），`write_autoselect_map()` 写映射表；原「智能地区分组」已下线 |
+| `luasrc/controller/shadowsocksr.lua` | 延迟测试等 RPC（自定义分组 CRUD 已于 1403 移除） |
+| `luasrc/view/shadowsocksr/clash_groups_ui.htm` | **新增**：策略组卡片流面板前端组件 |
 | `luasrc/view/shadowsocksr/clash_main_panel.htm` | 引入新组件、传入新接口地址 |
 | `luasrc/view/shadowsocksr/clash_panel.htm` | 同上（独立页面版） |
-| `luasrc/model/cbi/shadowsocksr/servers.lua` | 新增开关：`mihomo_urltest`（改名「Mihomo 智能分组与自动选择」）、`mihomo_auto_regions` / `_min` / `_max` |
-| `root/etc/init.d/shadowsocksr` | 启动日志补充分组统计 |
+| `luasrc/model/cbi/shadowsocksr/servers.lua` | 开关：`mihomo_urltest`（Clash 自动切换）、`mihomo_autoselect_apply` |
+| `root/etc/init.d/shadowsocksr` | `apply_clash_autoselect()` 启动后切到自动组 + 日志；mihomo 启动失败写出真实原因 |
 | `root/usr/share/shadowsocksr/shadowsocksr.config` | 新增选项的默认值 |
 | `po/zh_Hans/ssr-plus.po` | 新增文案的中文翻译 |
-| `Makefile` | `PKG_RELEASE` → `1402` |
+| `Makefile` | `PKG_RELEASE` → `1403` |
 
-> 补丁的目标是「把上游 v196.14 变成 1401」，所以除了本次的分组功能，也一并带上了
-> 早先的 url-test 自动选节点与延迟可视化改动 —— 这些本来就是本项目相对上游的全部差异。
+> 补丁的目标是「把上游 v196.14 变成 1403」，所以除了本次的自动切换功能，也一并带上了
+> 早先的延迟可视化与排障增强改动 —— 这些本来就是本项目相对上游的全部差异。
 
 ### 换到别的上游版本
 
@@ -160,7 +161,7 @@ apk 的版本号语法实测很严：`+sg` / `~sg` / `.sg1` / `-sg` 全部被 `a
 * `git apply --check` / `patch -p1 --dry-run` 均干净通过
 * 打完补丁的树与当前工作树**逐文件 sha 完全一致**（整树递归 diff 为空）
 * 从打补丁的树构建：ipk `758cf2eb…`、apk `ffce796c…`、语言包 apk `076ab7fa…`
-  —— 与直接构建的 `196-r1402` **字节完全相同**
+  —— 与直接构建的 `196-r1403` **字节完全相同**
 * 语言包内的 `ssr-plus.zh-cn.lmo` sha `3dd3af54…` 三方一致
 
 **路线 B**（对 `196-r13` 基线包注入）
@@ -168,13 +169,13 @@ apk 的版本号语法实测很严：`+sg` / `~sg` / `.sg1` / `-sg` 全部被 `a
 | 比对 | 结果 |
 |---|---|
 | 注入后 ipk vs 基线 ipk | 差异 **8 项** = 7 个替换 + 1 个新增，其余文件一字未动 |
-| 注入后 ipk vs r1402 ipk | **0 差异** |
+| 注入后 ipk vs r1403 ipk | **0 差异** |
 | 注入后 apk vs 基线 apk | 差异 **8 项** |
-| 注入后 apk vs r1402 apk | **0 差异** |
+| 注入后 apk vs r1403 apk | **0 差异** |
 | apk 元数据 | name / arch / license / origin / maintainer / url / depends(16) / provides 全部保留 |
 | 语言包（ipk + apk） | 注入后 `.lmo` sha 与 payload 一致 |
 
-即：注入出来的包，文件树与从源码编译的 `196-r1402` 一模一样。
+即：注入出来的包，文件树与从源码编译的 `196-r1403` 一模一样。
 
 **未验证**：没有在真实路由器上 `opkg install` / `apk add` 跑过，也没有真机开启过新开关。
 装机建议先备份 `/etc/config/shadowsocksr`。

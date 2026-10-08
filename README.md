@@ -8,13 +8,15 @@
 
 ## 功能（相对上游 v196.14 的增量）
 
-- **智能地区分组**：订阅 YAML 没自带节点分组时，按节点名里的地区关键词（港/新/日/美/台/韩…）
-  自动生成地区 url-test 组 + 全局自动选择组，并把组名注入各分流组。开关：`mihomo_urltest` +
-  `mihomo_auto_regions`（每组最少节点数 / 最多组数可调）。
-- **自定义分组**：面板「分组管理」里手动建组、勾选节点、选自动/手动模式，可作用于各分流组。
-- **url-test 自动选最快节点**：为每个叶子组生成 url-test 孪生组并置顶。
+- **自动切换（核心）**：订阅里的策略组几乎全是 `select` 手动选择器 —— 选中的节点断了也不会
+  自己换。开启后为每个选择器生成一个成员相同的 `url-test` 自动组，由 Mihomo 持续挑选最快的
+  那个；面板上手选任意节点照旧。开关：`mihomo_urltest`（可选 `mihomo_autoselect_apply` 让服务
+  每次启动后自动把选择器指向自动组）。
 - **策略组面板延迟可视化**：自动选择 / 当前选中 / 实际出口节点 + 成员延迟 chip
   （绿 <200ms、黄 <500ms、橙 <1s、红 ≥1s、灰 = 无数据）+ 单组/全部测速。
+- **统一 Clash 面板（左侧三页签）**：代理组 / 客户端规则 / 组件更新 合到一个弹窗里，
+  卡片流布局、跟随 LuCI 明暗主题；客户端规则保存后自动重载服务，组件升级完成后自动
+  reload（主程序升级则自动刷新页面）。
 
 ## 安装
 
@@ -22,11 +24,11 @@
 
 ```sh
 # opkg（传统 ipk 固件）
-opkg install luci-app-ssr-plus_196-r1402_all.ipk
-opkg install luci-i18n-ssr-plus-zh-cn_196-r1402_all.ipk
+opkg install luci-app-ssr-plus_196-r1403_all.ipk
+opkg install luci-i18n-ssr-plus-zh-cn_196-r1403_all.ipk
 
 # apk（apk-tools v3 固件，如 OpenWrt 24.10+ / ImmortalWrt）
-apk add --allow-untrusted ./luci-app-ssr-plus-196-r1402.apk
+apk add --allow-untrusted ./luci-app-ssr-plus-196-r1403.apk
 ```
 
 装完刷新 LuCI 页面即可。功能开关默认是关的，在「服务 → ShadowSocksR Plus+ → 服务器」里打开。

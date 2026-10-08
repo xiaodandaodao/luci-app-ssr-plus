@@ -64,72 +64,22 @@ function visibleText(doc) {
 	const toolbar = btns('.scui-toolbar').map(txt);
 	check('工具栏含「全部测速」', toolbar.some((t) => t.includes('全部测速')), toolbar.join('/'));
 	check('工具栏含「刷新」', toolbar.some((t) => t.includes('刷新')), toolbar.join('/'));
-	check('工具栏含「分组管理」', toolbar.some((t) => t.includes('分组管理')), toolbar.join('/'));
-
 	const cards = d.querySelectorAll('.scui-card');
 	check('渲染出策略组卡片', cards.length >= 4, '数量=' + cards.length);
+	check('每张卡片都有成员下拉框',
+		cards.length > 0 && [...cards].every((c) => !!c.querySelector('select.scui-select')),
+		'卡片=' + cards.length);
 
-	const gmBtn = btns().find((b) => txt(b).includes('分组管理'));
-	check('找到「分组管理」按钮', !!gmBtn);
-	if (!gmBtn) return done();
+	const chips = d.querySelectorAll('.scui-node');
+	check('渲染出成员延迟 chip', chips.length > 0, '数量=' + chips.length);
 
-	gmBtn.click();
-	check('分组管理弹窗已打开', !!d.querySelector('.scui-gm.is-open'));
-	await wait(400); // refresh() 走桩 XHR，内容是异步渲染的
-
-	const note = d.querySelector('.scui-gm-note');
-	check('显示地区分组状态', !!note && /地区自动分组/.test(txt(note)), txt(note).slice(0, 48));
-
-	const items = d.querySelectorAll('.scui-gm-item');
-	check('列出现有自定义分组', items.length === 2, '数量=' + items.length);
-	const names = [...items].map((i) => txt(i.querySelector('.scui-gm-item-name')));
-	check('分组名与模式徽标正确',
-		names.includes('港新低延迟') && names.includes('流媒体备用'),
-		names.join('/'));
-	check('分组显示节点数而非 undefined',
-		[...items].every((i) => /\d+ 个节点/.test(txt(i))),
-		[...items].map((i) => txt(i.querySelector('.scui-gm-item-meta'))).join('/'));
-	check('编辑/删除按钮文案正常',
-		[...items].every((i) => /编辑/.test(txt(i)) && /删除/.test(txt(i))));
-
-	const addBtn = btns('.scui-gm-actions').find((b) => txt(b).includes('新建分组'));
-	check('有「新建分组」按钮', !!addBtn);
-	if (!addBtn) return done();
-
-	addBtn.click();
-	const labels = [...d.querySelectorAll('.scui-gm-label')].map(txt);
-	check('编辑器含「分组名称」字段', labels.includes('分组名称'), labels.join('/'));
-	check('编辑器含「模式」字段', labels.includes('模式'), labels.join('/'));
-
-	const nodeRows = d.querySelectorAll('.scui-gm-node');
-	check('节点多选列表已渲染', nodeRows.length >= 20, '数量=' + nodeRows.length);
-
-	const sub = btns('.scui-gm-subhead').map(txt);
-	check('有「全选」按钮', sub.some((t) => t.includes('全选')), sub.join('/'));
-	check('有「清空」按钮', sub.some((t) => t.includes('清空')), sub.join('/'));
-
-	const acts = btns('.scui-gm-actions').map(txt);
-	check('有「保存」按钮', acts.some((t) => t.includes('保存')), acts.join('/'));
-	check('有「取消」按钮', acts.some((t) => t.includes('取消')), acts.join('/'));
-
-	// ---- 走一遍新建流程：填名 -> 勾节点 -> 保存
-	const nameInput = d.querySelector('.scui-gm-input');
-	const firstBox = d.querySelector('.scui-gm-node input[type=checkbox]');
-	const saveBtn = btns('.scui-gm-actions').find((b) => txt(b).includes('保存'));
-	check('表单控件齐全', !!nameInput && !!firstBox && !!saveBtn);
-	if (nameInput && firstBox && saveBtn) {
-		nameInput.value = '测试分组';
-		nameInput.dispatchEvent(new win.Event('input', { bubbles: true }));
-		firstBox.checked = true;
-		firstBox.dispatchEvent(new win.Event('change', { bubbles: true }));
-		saveBtn.click();
-		await wait(400);
-
-		const after = d.querySelectorAll('.scui-gm-item');
-		check('保存后新分组进入列表',
-			[...after].some((i) => txt(i).includes('测试分组')),
-			'数量=' + after.length);
-		check('保存流程无异常', errors.length === 0, errors.join(' | '));
+	// 跑一遍「全部测速」，确认回调不抛异常（自动组的 now / 出口节点会在这里刷新）
+	const testBtn = btns('.scui-toolbar').find((b) => txt(b).includes('全部测速'));
+	check('找到「全部测速」按钮', !!testBtn);
+	if (testBtn) {
+		testBtn.click();
+		await wait(300);
+		check('全部测速无异常', errors.length === 0, errors.join(' | '));
 	}
 
 	check('全流程结束后仍无 undefined 文案', !/undefined/.test(visibleText(d)));

@@ -479,6 +479,10 @@ msgstr "客户端规则已导出为 CSV 文件。"
 msgid "Client rules imported from CSV file. Click Save to apply."
 msgstr "客户端规则已从 CSV 文件导入，请点击保存生效。"
 
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm:56
+msgid "Client Rules"
+msgstr "客户端规则"
+
 #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm:1110
 msgid "Client supports manual IP or IP/CIDR input."
 msgstr "客户端支持手动输入 IP 或 IP/CIDR。"
@@ -870,61 +874,6 @@ msgstr "启用 ML-DSA-65 (可选)"
 #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:564
 msgid "Enable Mihomo core"
 msgstr "启用 Mihomo 核心"
-
-#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:591
-msgid "Mihomo Smart Grouping and Auto Select"
-msgstr "Mihomo 智能分组与自动选择"
-
-#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:594
-msgid ""
-"Smart grouping for Mihomo/Clash: when the subscription YAML has no node "
-"groups of its own, nodes are grouped by the region found in their names "
-"(e.g. Hong Kong 01 / Hong Kong 02 -> China Hong Kong), and every region "
-"group automatically uses its fastest node. A global auto-select group over "
-"all nodes is added as well. All these group names are inserted into every "
-"route group, so a route group can pick a whole region at once. Custom groups "
-"can be created from the Group Manager button in the Clash panel. If a node "
-"was already selected manually before, press Reset Default Proxies Rules once "
-"so Mihomo falls back to the new default."
-msgstr ""
-"为 Mihomo/Clash 做智能分组：当订阅 YAML 本身没有节点分组时，按节点名里的地区自动"
-"归类（如 香港01/香港02 → 中国香港），每个地区组内部自动使用最快节点；同时生成一个"
-"覆盖全部节点的全局自动选择组。这些组名会被插入到每个分流组的节点选择里，分流组可以"
-"直接选「某个地区」。自定义分组可在 Clash 面板的「分组管理」里创建。若此前已手动选过"
-"节点，请点一次「重置默认代理规则」，Mihomo 才会回落到新的默认项。"
-
-#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:596
-msgid "Region Auto Grouping"
-msgstr "地区自动分组"
-
-#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:599
-msgid ""
-"Group nodes by region when the subscription provides no node groups of its "
-"own. Turn it off to keep only the global auto-select group."
-msgstr ""
-"订阅没有自带节点分组时，按地区自动归类。关闭后只保留全局自动选择组。"
-
-#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:602
-msgid "Region Group Minimum Nodes"
-msgstr "地区分组最少节点数"
-
-#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:605
-msgid ""
-"A region becomes its own group only when it has at least this many nodes "
-"(set 1 so single-node regions are grouped too)."
-msgstr ""
-"某地区至少有这么多节点时才单独成组（设为 1 则单节点地区也成组）。"
-
-#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:608
-msgid "Region Group Maximum Count"
-msgstr "地区分组数量上限"
-
-#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:611
-msgid ""
-"Upper limit of generated region groups; the regions with the most nodes are "
-"kept."
-msgstr ""
-"自动生成的地区分组数量上限，超出时保留节点最多的地区。"
 
 #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:601
 msgid "URL-Test Address"
@@ -2808,10 +2757,6 @@ msgstr "该部分目前无任何内容。"
 msgid "Through proxy update"
 msgstr "通过代理更新"
 
-#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:502
-msgid "Through proxy update list, Not Recommended"
-msgstr "通过路由器自身代理更新订阅"
-
 #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/advanced_switch_compact.htm:106
 msgid "Timeout"
 msgstr "超时"
@@ -2988,6 +2933,26 @@ msgstr "发现可升级版本"
 #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:44
 msgid "Upgrade completed"
 msgstr "升级完成"
+
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm:352
+msgid "Upgrade completed. Reloading the page to apply the new interface."
+msgstr "升级完成，正在刷新页面以加载新界面。"
+
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm:358
+msgid "Upgrade completed. Restart SSR Plus to apply the new version."
+msgstr "升级完成，请重启 SSR Plus 以应用新版本。"
+
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm:363
+msgid "Upgrade completed. Reloading service to apply the new version."
+msgstr "升级完成，正在重载服务以应用新版本。"
+
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm:368
+msgid "Service reloaded. The new version is now in use."
+msgstr "服务已重载，新版本已生效。"
+
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm:370
+msgid "Upgrade completed. Reload failed, restart SSR Plus manually."
+msgstr "升级完成，但重载失败，请手动重启 SSR Plus。"
 
 #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:162
 #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:315
@@ -4095,129 +4060,34 @@ msgstr "放行"
 # 分组管理 / 自定义分组
 # ---------------------------------------------------------------------------
 
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Group Manager"
-msgstr "分组管理"
+#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:502
+msgid "Through proxy update list, Not Recommended"
+msgstr "通过路由器自身代理更新订阅"
 
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Custom Groups"
-msgstr "自定义分组"
+#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:591
+msgid "Clash Auto Selecting"
+msgstr "Clash 自动切换"
 
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "New Group"
-msgstr "新建分组"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Group Name"
-msgstr "分组名称"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "e.g. My Hong Kong"
-msgstr "例如：我的香港"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Mode"
-msgstr "模式"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Auto (fastest)"
-msgstr "自动（最快）"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Manual"
-msgstr "手动选择"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Select Nodes"
-msgstr "选择节点"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Select All"
-msgstr "全选"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Clear"
-msgstr "清空"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Cancel"
-msgstr "取消"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Selected: %d"
-msgstr "已选：%d"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "%d nodes"
-msgstr "%d 个节点"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "No custom groups yet."
-msgstr "还没有自定义分组。"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "No nodes match the filter."
-msgstr "没有匹配的节点。"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Filter nodes..."
-msgstr "筛选节点..."
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Delete this custom group?"
-msgstr "删除这个自定义分组？"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Group name is required."
-msgstr "请填写分组名称。"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Pick at least one node."
-msgstr "请至少选择一个节点。"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Custom group saved."
-msgstr "自定义分组已保存。"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Custom group saved and applied."
-msgstr "自定义分组已保存并生效。"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Custom group deleted."
-msgstr "自定义分组已删除。"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Custom group deleted and applied."
-msgstr "自定义分组已删除并生效。"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Failed to save the custom group."
-msgstr "保存自定义分组失败。"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Failed to delete the custom group."
-msgstr "删除自定义分组失败。"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Region auto-grouping is ON"
-msgstr "地区自动分组已开启"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
-msgid "Region auto-grouping is OFF"
-msgstr "地区自动分组未开启"
-
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
+#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:593
 msgid ""
-"Nodes are grouped by region (at least %d nodes each); every region group "
-"picks its own fastest node, and the group names are added to each route "
-"group."
+"Subscription configs are almost all manual selectors: the node you"
+" picked stays selected even after it goes down. Turning this on ad"
+"ds one auto group to every selector — same members, but Mihomo kee"
+"ps picking whichever is fastest. Keep selecting individual nodes f"
+"reely; choose the auto group in the panel to hand control back to "
+"Mihomo."
 msgstr ""
-"节点已按地区分组（每个地区至少 %d 个节点）；每个地区组内部自动选最快节点，组名也已"
-"加入各分流组的节点选择。"
+"订阅里的策略组几乎全是手动选择器：选中的那个节点即使断了、慢了，Mihomo 也不会替你换一个。开启后为每个选择器生成一"
+"个成员相同的自动组，由 Mihomo 持续挑选最快的那个；你仍然可以手选任意节点，想交给 Mihomo 就在面板里选那个"
+"自动组。"
 
-#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:0
+#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:595
+msgid "Apply After Start"
+msgstr "启动后自动应用"
+
+#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:597
 msgid ""
-"Turn on \"Mihomo Smart Grouping and Auto Select\" on the Servers page first."
-msgstr ""
-"请先在「服务器」页开启「Mihomo 智能分组与自动选择」。"
+"Automatically point every selector at its auto group each time the"
+" service starts. Turn it off to switch manually in the Proxy Group"
+" panel."
+msgstr "每次启动服务时把所有选择器指向各自的自动组。关掉的话就只能在策略组面板里手动切换。"
