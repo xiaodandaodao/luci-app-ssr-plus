@@ -1,13 +1,13 @@
 {
   "format": 1,
-  "generated_from_version": "196-r1901",
-  "generated_from_commit": "",
+  "generated_from_version": "196-r1902",
+  "generated_from_commit": "16617be",
   "patch": "ssrplus-local-changes.patch",
   "packages": {
     "app": "luci-app-ssr-plus",
     "i18n": "luci-i18n-ssr-plus-zh-cn"
   },
-  "mtime": 1791445792,
+  "mtime": 1791367724,
   "files": [
     {
       "target": "app",

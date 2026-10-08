@@ -1,5 +1,5 @@
 diff --git a/Makefile b/Makefile
-index 425251a..cb02cef 100644
+index 425251a..10abd80 100644
 --- a/Makefile
 +++ b/Makefile
 @@ -4,7 +4,11 @@ LUCI_TITLE:=luci-app-ssr-plus
@@ -11,7 +11,7 @@ index 425251a..cb02cef 100644
 +#   上游 v196.19 的第 1 版 = 1901，第 2 版 = 1902；上游升到 r20 则重新从 2001 起。
 +#   必须是纯数字且单调递增 —— apk 的 "-r" 后只接受整数（RE13 这类写法会被 mkpkg 拒绝），
 +#   数字编码同时保证 opkg/apk 都会把它判定为「比旧版新」的升级。
-+PKG_RELEASE:=1901
++PKG_RELEASE:=1902
  
  PKG_CONFIG_DEPENDS:= \
  	CONFIG_PACKAGE_$(PKG_NAME)_Iptables_Transparent_Proxy \
