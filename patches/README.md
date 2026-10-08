@@ -19,7 +19,7 @@
 
 ## A. 源码补丁
 
-补丁相对 **上游 `fw876/helloworld` 的 tag `v196.19`** 生成，包含 12 个文件的改动
+补丁相对 **上游 `fw876/helloworld` 的 tag `v196.19`** 生成，包含 14 个文件的改动
 （其中 `luasrc/view/shadowsocksr/clash_groups_ui.htm` 是新增文件）。
 
 ```bash

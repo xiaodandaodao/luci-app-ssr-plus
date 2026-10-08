@@ -25,7 +25,7 @@
 因此 `patches/` 里的补丁仍是**上游视角**的路径（`luci-app-ssr-plus/…`，用于打在上游 / fork 的 helloworld 树上），
 若要直接打在本仓库根，请用 `patch -p2` / `git apply -p2`。
 
-## 2. 相对上游的功能改动（12 个文件）
+## 2. 相对上游的功能改动（14 个文件）
 
 对应 `patches/ssrplus-local-changes.patch`。
 
@@ -45,7 +45,7 @@
 
 ### ①–⑦ 本仓库的改动
 
-以下七批改动：
+以下八批改动：
 
 ### ① 面板延迟可视化
 
@@ -136,8 +136,22 @@ LuCI 侧边栏的独立页面 —— 三处来回跳。现在合并成一个弹�
 > 因此只有主程序这一条的源地址被替换。效果：「组件更新 → SSR Plus+ Main Program → 在线升级」
 > 会从本仓库的 latest Release 取 `luci-app-ssr-plus_<ver>_all.ipk` 或 `luci-app-ssr-plus-<ver>.apk` 并安装。
 
-> 上游 `po/zh-cn/` 目录（同内容、旧命名）未同步改动，属已知差异，不影响 lmo 生成（本仓库用 `po/zh_Hans/`）。
+### ⑧ 组件下载链路加固 + 死镜像替换（1903）
 
+| 文件 | 改动 |
+|---|---|
+| `root/usr/share/shadowsocksr/update_components.sh` | 新增 `download_url_once()` / `fetch_text_once()` / `github_proxy_urls()` / `jsdelivr_alt_url()`；`download_file()` 与 `fetch_text()` 在原地址（含用户所选镜像）失败后，自动依次改走 jsdelivr release 分支镜像与 GitHub 加速代理（`ghfast.top` / `ghproxy.net` / `ghproxy.cc` / `gh-proxy.com`，可用 `GH_PROXY_HOSTS` 覆盖）。慢速/被墙时不再直接 `Download failed` |
+| 同上 | 镜像项 `ghproxy` 指向的 `mirror.ghproxy.com` 已停止服务（实测 `SSL connection timeout`），改为 `ghproxy.net` |
+| `luasrc/view/shadowsocksr/component.htm`、`luasrc/model/cbi/shadowsocksr/component.lua` | 镜像下拉的显示名同步为 `ghproxy.net` / `testingcf.jsdelivr.net`（option 值与 uci 存储不变，兼容旧配置） |
+
+> 起因：V2Ray GeoIP / V2Ray GeoSite 两个数据源「没法安装更新」。实测**源本身没问题**
+> （`Loyalsoldier/geoip` 的 `geoip-only-cn-private.dat` 与 `Loyalsoldier/v2ray-rules-dat` 的 `geosite.dat`
+> 都存在且可下载，jsdelivr `@release` 镜像也正常），卡点在下载通道：GitHub Release 资产会 302 到
+> `objects.githubusercontent.com`，直连经常超时；而镜像选项里的 `mirror.ghproxy.com` 已经彻底死掉，
+> 选中它等于所有组件都下不动。现在无论用户选哪个镜像，直连失败都会自动降级到可用通道，
+> `/usr/share/v2ray/` 也不存在时由升级流程自动创建（1901 已修，本次复验通过）。
+
+> 上游 `po/zh-cn/` 目录（同内容、旧命名）未同步改动，属已知差异，不影响 lmo 生成（本仓库用 `po/zh_Hans/`）。
 ## 3. 本仓库新增的非上游文件
 
 | 路径 | 说明 | 来源 / 许可 |
@@ -165,5 +179,5 @@ LuCI 侧边栏的独立页面 —— 三处来回跳。现在合并成一个弹�
 ## 5. 说明
 
 - 本仓库**不是**上游官方发布渠道，产出物仅供自用/分发参考；请优先支持上游作者。
-- 上游若更新，建议按仓库 README 的「同步上游」流程 rebase 并重放上述 12 个文件的改动。
+- 上游若更新，建议按仓库 README 的「同步上游」流程 rebase 并重放上述 14 个文件的改动。
 - 若本仓库内容对上游权利人有任何不妥，可随时移除相关衍生部分。

@@ -6,6 +6,8 @@ set -u
 XRAY_RELEASE_PAGE="https://github.com/fw876/helloworld/releases/latest"
 # SSR+ 主程序（luci-app-ssr-plus）：在线升级指向本衍生仓库的 Release
 MAINPROGRAM_REPO="xiaodandaodao/luci-app-ssr-plus"
+# GitHub 加速代理：直连 github.com 失败时的兜底通道（可用 GH_PROXY_HOSTS 覆盖）
+GH_PROXY_HOSTS="${GH_PROXY_HOSTS:-ghfast.top ghproxy.net ghproxy.cc gh-proxy.com}"
 XRAY_BINARY="/usr/bin/xray"
 
 # Geo 数据文件 URL
@@ -59,7 +61,7 @@ mirror_wrap_url() {
 			printf '%s' "$raw_url"
 			;;
 		ghproxy)
-			printf 'https://mirror.ghproxy.com/%s' "$raw_url"
+			printf 'https://ghproxy.net/%s' "$raw_url"
 			;;
 		ghproxy_cc)
 			printf 'https://ghproxy.cc/%s' "$raw_url"
@@ -297,19 +299,86 @@ effective_url() {
 	printf '%s' "$url"
 }
 
-fetch_text() {
-	local url="$1"
-	local wget_cmd
+# 把 github.com 原始地址套上加速代理（每个代理一行）
+github_proxy_urls() {
+	local raw="$1"
+	local host
 
-	if curl -kfsSL --http1.1 --connect-timeout 10 --retry 2 -A 'curl/8.0' -H 'Accept: application/vnd.github+json' "$url" 2>/dev/null; then
+	for host in $GH_PROXY_HOSTS; do
+		[ -n "$host" ] || continue
+		printf 'https://%s/%s\n' "$host" "$raw"
+	done
+}
+
+# 已知仓库的 Release 资产在 jsdelivr 的 release 分支镜像（国内通常可直连）
+jsdelivr_alt_url() {
+	local raw="$1"
+
+	case "$raw" in
+		https://github.com/Loyalsoldier/geoip/releases/download/*)
+			printf '%s' "$raw" | sed 's#https://github.com/Loyalsoldier/geoip/releases/download/[^/]*/\(.*\)#https://testingcf.jsdelivr.net/gh/Loyalsoldier/geoip@release/\1#'
+			;;
+		https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/*)
+			printf '%s' "$raw" | sed 's#https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/[^/]*/\(.*\)#https://testingcf.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/\1#'
+			;;
+		https://github.com/alecthw/mmdb_china_ip_list/releases/download/*)
+			printf '%s' "$raw" | sed 's#https://github.com/alecthw/mmdb_china_ip_list/releases/download/[^/]*/\(.*\)#https://testingcf.jsdelivr.net/gh/alecthw/mmdb_china_ip_list@release/lite/\1#' | sed 's#-lite##'
+			;;
+		*)
+			return 1
+			;;
+	esac
+
+	return 0
+}
+
+# 单次抓取文本（不做备用源切换）
+fetch_text_once() {
+	local url="$1"
+	local wget_cmd out
+
+	out="$(curl -kfsSL --http1.1 --connect-timeout 10 --retry 2 -A 'curl/8.0' -H 'Accept: application/vnd.github+json' "$url" 2>/dev/null)"
+	if [ -n "$out" ]; then
+		printf '%s' "$out"
 		return 0
 	fi
 
-	wget_cmd="$(select_wget_cmd)" || return 1
-	"$wget_cmd" --header='Accept: application/vnd.github+json' --timeout=20 --tries=3 --no-check-certificate -O - "$url" 2>/dev/null
+	wget_cmd="$(select_wget_cmd 2>/dev/null || true)"
+	if [ -n "$wget_cmd" ]; then
+		out="$("$wget_cmd" --header='Accept: application/vnd.github+json' --timeout=20 --tries=3 --no-check-certificate -O - "$url" 2>/dev/null)"
+		if [ -n "$out" ]; then
+			printf '%s' "$out"
+			return 0
+		fi
+	fi
+
+	return 1
 }
 
-download_file() {
+# 抓取文本：原地址失败时改走 GitHub 加速代理
+fetch_text() {
+	local url="$1"
+	local alt
+
+	if fetch_text_once "$url"; then
+		return 0
+	fi
+
+	case "$url" in
+		https://github.com/*)
+			for alt in $(github_proxy_urls "$url"); do
+				if fetch_text_once "$alt"; then
+					return 0
+				fi
+			done
+			;;
+	esac
+
+	return 1
+}
+
+# 单次下载（不做备用源切换）
+download_url_once() {
 	local url="$1"
 	local output="$2"
 	local wget_cmd
@@ -318,8 +387,37 @@ download_file() {
 		return 0
 	fi
 
-	wget_cmd="$(select_wget_cmd)" || return 1
+	wget_cmd="$(select_wget_cmd 2>/dev/null || true)"
+	[ -n "$wget_cmd" ] || return 1
 	"$wget_cmd" --no-check-certificate --timeout=20 --tries=3 -O "$output" "$url" >/dev/null 2>&1
+}
+
+# 下载文件：原地址（含用户选的镜像）失败时，依次尝试 jsdelivr 镜像与 GitHub 加速代理
+download_file() {
+	local url="$1"
+	local output="$2"
+	local alt
+
+	if download_url_once "$url" "$output"; then
+		return 0
+	fi
+
+	case "$url" in
+		https://github.com/*)
+			alt="$(jsdelivr_alt_url "$url" 2>/dev/null || true)"
+			if [ -n "$alt" ] && download_url_once "$alt" "$output"; then
+				return 0
+			fi
+
+			for alt in $(github_proxy_urls "$url"); do
+				if download_url_once "$alt" "$output"; then
+					return 0
+				fi
+			done
+			;;
+	esac
+
+	return 1
 }
 
 store_geo_version() {

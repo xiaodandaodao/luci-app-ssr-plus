@@ -12,10 +12,10 @@ s = m:section(SimpleSection)
 
 o = m:field(ListValue, "component_mirror", translate("Mirror URL"))
 o:value("direct", translate("GitHub Direct"))
-o:value("ghproxy", "mirror.ghproxy.com")
+o:value("ghproxy", "ghproxy.net")
 o:value("ghproxy_cc", "ghproxy.cc")
 o:value("ghfast", "ghfast.top")
-o:value("jsdelivr", "cdn.jsdelivr.net")
+o:value("jsdelivr", "testingcf.jsdelivr.net")
 o.rmempty = false
 o.cfgvalue = function(self)
 	return m.uci:get_first("shadowsocksr", "global", "component_mirror") or "direct"
