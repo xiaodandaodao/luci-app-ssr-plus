@@ -45,23 +45,50 @@ local current_sid = self.map:get(section, "global_server") or "nil"
 				<input type="button" id="ssr-clash-modal-close" class="btn cbi-button" value="<%:Close%>" />
 			</div>
 		</div>
-		<div class="scui-modal-body">
-			<div id="ssr-clash-client-rules" style="display:none">
-				<div class="scui-rules-note"><%:Define per-client Mihomo proxy targets. Rules are injected as SRC-IP-CIDR entries before the original Clash rules.%> <%:Client supports manual IP or IP/CIDR input.%></div>
-				<table>
-					<thead>
-						<tr>
-							<th style="width:1%"><%:Enable%></th>
-							<th style="width:26%"><%:Client%></th>
-							<th style="width:26%"><%:Policy%></th>
-							<th><%:Remarks%></th>
-							<th style="width:1%"><%:Actions%></th>
-						</tr>
-					</thead>
-					<tbody id="ssr-clash-client-rules-body"></tbody>
-				</table>
+		<div class="scui-modal-body scui-has-nav">
+			<nav class="scui-nav" id="ssr-clash-nav" aria-label="<%:Clash Panel%>">
+				<button type="button" class="scui-nav-item is-active" data-mode="groups">
+					<span class="scui-nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></span>
+					<span class="scui-nav-text"><%:Proxy Groups%></span>
+				</button>
+				<button type="button" class="scui-nav-item" data-mode="rules">
+					<span class="scui-nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="13" height="9" rx="2"/><path d="M18 8h3.5"/><path d="M2.5 17.5h13"/><path d="M18 15.5h3.5"/></svg></span>
+					<span class="scui-nav-text"><%:Client Rules%></span>
+				</button>
+				<button type="button" class="scui-nav-item" data-mode="components">
+					<span class="scui-nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M8 10.5 12 14.5 16 10.5"/><path d="M4.5 16.5v2A2.5 2.5 0 0 0 7 21h10a2.5 2.5 0 0 0 2.5-2.5v-2"/></svg></span>
+					<span class="scui-nav-text"><%:Component Update%></span>
+				</button>
+			</nav>
+
+			<div class="scui-panes">
+				<div class="scui-pane" id="ssr-clash-pane-groups">
+					<div id="ssr-clash-modal-groups"></div>
+				</div>
+
+				<div class="scui-pane" id="ssr-clash-pane-rules" style="display:none">
+					<div id="ssr-clash-client-rules">
+						<div class="scui-rules-note"><%:Define per-client Mihomo proxy targets. Rules are injected as SRC-IP-CIDR entries before the original Clash rules.%> <%:Client supports manual IP or IP/CIDR input.%></div>
+						<table>
+							<thead>
+								<tr>
+									<th style="width:1%"><%:Enable%></th>
+									<th style="width:26%"><%:Client%></th>
+									<th style="width:26%"><%:Policy%></th>
+									<th><%:Remarks%></th>
+									<th style="width:1%"><%:Actions%></th>
+								</tr>
+							</thead>
+							<tbody id="ssr-clash-client-rules-body"></tbody>
+						</table>
+					</div>
+				</div>
+
+				<div class="scui-pane" id="ssr-clash-pane-components" style="display:none">
+					<script type="text/javascript">window.ssrComponentLazy = true;</script>
+					<%+shadowsocksr/component%>
+				</div>
 			</div>
-			<div id="ssr-clash-modal-groups"></div>
 		</div>
 	</div>
 </div>
@@ -113,6 +140,135 @@ local current_sid = self.map:get(section, "global_server") or "nil"
 		}
 		#ssr-clash-modal .scui-modal-head { padding: 10px 12px; }
 		#ssr-clash-modal .scui-modal-body { padding: 10px 12px 14px; }
+	}
+
+	/* ------------------------------------------------------- 左侧页签导航 */
+	#ssr-clash-modal .scui-modal-body.scui-has-nav {
+		display: flex;
+		align-items: flex-start;
+		gap: 16px;
+	}
+
+	#ssr-clash-modal .scui-nav {
+		flex: 0 0 168px;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		position: sticky;
+		top: 0;
+	}
+
+	#ssr-clash-modal .scui-nav-item {
+		display: flex;
+		align-items: center;
+		gap: 9px;
+		width: 100%;
+		min-height: 38px;
+		padding: 0 11px;
+		border: 1px solid transparent;
+		border-radius: 10px;
+		background: transparent;
+		color: var(--scui-muted);
+		font: inherit;
+		font-size: 13px;
+		text-align: left;
+		cursor: pointer;
+		box-sizing: border-box;
+		transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+		-webkit-appearance: none;
+		appearance: none;
+	}
+	#ssr-clash-modal .scui-nav-item:hover { background: var(--scui-surface-2); color: var(--scui-fg); }
+	#ssr-clash-modal .scui-nav-item.is-active {
+		background: var(--scui-accent-soft);
+		border-color: var(--scui-accent-ring);
+		color: var(--scui-accent);
+		font-weight: 600;
+	}
+
+	#ssr-clash-modal .scui-nav-ico {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex: 0 0 auto;
+		width: 16px;
+		height: 16px;
+	}
+	#ssr-clash-modal .scui-nav-ico svg { width: 16px; height: 16px; display: block; }
+	#ssr-clash-modal .scui-nav-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+	#ssr-clash-modal .scui-panes { flex: 1 1 auto; min-width: 0; }
+
+	/* ------------------------------------------------------- 组件更新页签美化 */
+	#ssr-clash-pane-components .cbi-section {
+		margin: 0 0 14px;
+		padding: 14px;
+		border: 1px solid var(--scui-line);
+		border-radius: var(--scui-radius);
+		background: var(--scui-surface);
+		box-shadow: var(--scui-shadow-sm);
+	}
+	#ssr-clash-pane-components .cbi-section legend {
+		padding: 0 6px;
+		font-size: 13px;
+		font-weight: 650;
+		color: var(--scui-fg);
+	}
+	#ssr-clash-pane-components .cbi-value { border: 0; padding: 0; }
+	#ssr-clash-pane-components .cbi-value-field { display: block; width: 100%; }
+	#ssr-clash-pane-components .component-upgrade-card { width: 100%; color: var(--scui-fg); }
+	#ssr-clash-pane-components .component-layout { gap: 18px; }
+	#ssr-clash-pane-components .component-left { width: 260px; min-width: 180px; }
+	#ssr-clash-pane-components .component-select-label { color: var(--scui-faint); }
+	#ssr-clash-pane-components .component-select-label strong { color: var(--scui-muted); }
+	#ssr-clash-pane-components .component-selector,
+	#ssr-clash-pane-components select.cbi-input-select {
+		width: 100%;
+		height: 34px;
+		padding: 0 10px;
+		border-radius: 9px;
+		background: var(--scui-surface-2);
+		color: var(--scui-fg);
+		border: 1px solid var(--scui-line-strong);
+		box-sizing: border-box;
+	}
+	#ssr-clash-pane-components select.cbi-input-select option { background: var(--scui-surface); color: var(--scui-fg); }
+	#ssr-clash-pane-components #component-status,
+	#ssr-clash-pane-components #geo-status {
+		padding: 10px 12px;
+		border-radius: 10px;
+		background: var(--scui-surface-2);
+		border: 1px solid var(--scui-line);
+		line-height: 1.8;
+	}
+	#ssr-clash-pane-components .component-upgrade-help { color: var(--scui-muted); }
+	#ssr-clash-pane-components .component-upgrade-actions { margin-top: 10px; }
+	#ssr-clash-pane-components .component-upgrade-actions .btn.cbi-button {
+		border-radius: 9px;
+		font-size: 12.5px;
+		height: 30px;
+		padding: 0 14px;
+		box-shadow: var(--scui-shadow-sm);
+	}
+	#ssr-clash-pane-components .component-upgrade-actions .btn.cbi-button-apply {
+		background: var(--scui-accent);
+		border-color: var(--scui-accent);
+		color: #fff;
+	}
+
+	@media (max-width: 900px) {
+		#ssr-clash-modal .scui-modal-body.scui-has-nav { flex-direction: column; }
+		#ssr-clash-modal .scui-nav {
+			flex: 0 0 auto;
+			width: 100%;
+			flex-direction: row;
+			gap: 6px;
+			overflow-x: auto;
+			position: static;
+		}
+		#ssr-clash-modal .scui-nav-item { width: auto; flex: 1 1 0; justify-content: center; }
+		#ssr-clash-pane-components .component-layout { flex-direction: column; }
+		#ssr-clash-pane-components .component-left { width: 100%; min-width: 0; }
 	}
 </style>
 
@@ -234,6 +390,13 @@ if (typeof(window.ssrClashResetDefaults) !== "function") {
 		<% end -%>
 	};
 
+	// 三个页签：代理组 / 客户端规则 / 组件更新
+	var PANES = {
+		groups: 'ssr-clash-pane-groups',
+		rules: 'ssr-clash-pane-rules',
+		components: 'ssr-clash-pane-components'
+	};
+
 	var RULES_BUTTONS = [
 		'ssr-clash-rules-add',
 		'ssr-clash-rules-save',
@@ -241,6 +404,13 @@ if (typeof(window.ssrClashResetDefaults) !== "function") {
 		'ssr-clash-rules-export',
 		'ssr-clash-rules-import'
 	];
+
+	// 每个页签在标题栏显示哪些按钮（代理组 / 组件更新各自带操作条）
+	var MODE_BUTTONS = {
+		groups: [],
+		rules: RULES_BUTTONS,
+		components: []
+	};
 
 	function $(id) { return document.getElementById(id); }
 
@@ -260,10 +430,7 @@ if (typeof(window.ssrClashResetDefaults) !== "function") {
 		urls: {
 			groups: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_groups")%>',
 			switch: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_switch")%>',
-			delayTest: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_delay_test")%>',
-			customGroups: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_custom_groups")%>',
-			customGroupSave: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_custom_group_save")%>',
-			customGroupDelete: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_custom_group_delete")%>'
+			delayTest: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_delay_test")%>'
 		}
 	});
 
@@ -274,10 +441,103 @@ if (typeof(window.ssrClashResetDefaults) !== "function") {
 	}
 
 	function setMode(mode) {
-		var rules = mode === 'rules';
-		show('ssr-clash-client-rules', rules);
-		show('ssr-clash-modal-groups', !rules);
-		RULES_BUTTONS.forEach(function(id) { show(id, rules); });
+		var name;
+		for (name in PANES) {
+			if (Object.prototype.hasOwnProperty.call(PANES, name)) {
+				show(PANES[name], name === mode);
+			}
+		}
+
+		var active = MODE_BUTTONS[mode] || [];
+		RULES_BUTTONS.forEach(function(id) { show(id, active.indexOf(id) >= 0); });
+
+		var items = document.querySelectorAll('#ssr-clash-nav .scui-nav-item');
+		for (var i = 0; i < items.length; i++) {
+			if (items[i].getAttribute('data-mode') === mode) {
+				items[i].classList.add('is-active');
+				items[i].setAttribute('aria-current', 'true');
+			} else {
+				items[i].classList.remove('is-active');
+				items[i].removeAttribute('aria-current');
+			}
+		}
+	}
+
+	// ------------------------------------------------- 组件更新页签（内嵌 component.htm）
+
+	var componentsReady = false;
+
+	function initComponents() {
+		if (componentsReady) {
+			return;
+		}
+		componentsReady = true;
+		if (typeof window.ssrComponentInit === 'function') {
+			window.ssrComponentInit();
+		}
+	}
+
+	// 组件升级成功后立刻让新版本生效：主程序刷页面，内核 / Geo 库重启服务
+	window.ssrComponentPostUpgrade = function(component) {
+		if (component === 'mainprogram') {
+			setPanelStatus('<%:Upgrade completed. Reloading the page to apply the new interface.%>', 'ok');
+			window.setTimeout(function() { window.location.reload(); }, 1800);
+			return;
+		}
+
+		var sid = currentPanelSid;
+		if (!sid || !clashNodes[sid]) {
+			setPanelStatus('<%:Upgrade completed. Restart SSR Plus to apply the new version.%>', 'warn');
+			return;
+		}
+
+		setPanelStatus('<%:Upgrade completed. Reloading service to apply the new version.%>', 'busy');
+		window.ssrXHR.get('<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_refresh")%>', {
+			sid: sid
+		}, function(x, result) {
+			if (result && result.success) {
+				setPanelStatus('<%:Service reloaded. The new version is now in use.%>', 'ok');
+			} else {
+				setPanelStatus('<%:Upgrade completed. Reload failed, restart SSR Plus manually.%>', 'warn');
+			}
+			if (clashUI) {
+				clashUI.load();
+			}
+		});
+	};
+
+	// ------------------------------------------------- 页签切换与数据加载
+
+	var MODE_LOADERS = {
+		groups: function() {
+			loadGroups(currentPanelSid);
+		},
+		rules: function() {
+			openClientRulesPanel(currentPanelSid);
+		},
+		components: function() {
+			initComponents();
+		}
+	};
+
+	function activateMode(mode) {
+		if (!PANES[mode]) {
+			mode = 'groups';
+		}
+		setMode(mode);
+		if (MODE_LOADERS[mode]) {
+			MODE_LOADERS[mode]();
+		}
+	}
+
+	function navItemOf(node) {
+		while (node && node !== document) {
+			if (node.classList && node.classList.contains('scui-nav-item')) {
+				return node;
+			}
+			node = node.parentNode;
+		}
+		return null;
 	}
 
 	function normalizeList(value) {
@@ -585,7 +845,6 @@ if (typeof(window.ssrClashResetDefaults) !== "function") {
 	function openClientRulesPanel(sid) {
 		currentEditorSid = sid;
 		setPanelStatus('<%:Loading...%>', 'busy');
-		setMode('rules');
 
 		window.ssrXHR.get('<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_client_policies")%>', {
 			sid: sid
@@ -612,7 +871,6 @@ if (typeof(window.ssrClashResetDefaults) !== "function") {
 		if (sid) {
 			currentPanelSid = sid;
 		}
-		setMode('groups');
 		if (clashUI) {
 			clashUI.setSid(currentPanelSid);
 			clashUI.load();
@@ -628,24 +886,25 @@ if (typeof(window.ssrClashResetDefaults) !== "function") {
 	};
 
 	window.ssrClashOpenClientRulesPanel = function(sid) {
-		openPanel(sid);
-		return openClientRulesPanel(sid);
+		return openPanel(sid, 'rules');
 	};
 
 	// ------------------------------------------------------------ 弹窗控制
 
-	function openPanel(sid) {
+	function openPanel(sid, mode) {
 		var modal = $('ssr-clash-modal');
 		var mask = $('ssr-clash-modal-mask');
 		if (!modal || !mask) {
 			return false;
 		}
 
-		currentPanelSid = sid;
+		if (sid) {
+			currentPanelSid = sid;
+		}
 		mask.style.display = 'block';
 		modal.style.display = 'block';
 		modal.scrollTop = 0;
-		loadGroups(sid);
+		activateMode(mode || 'groups');
 		return false;
 	}
 
@@ -793,6 +1052,20 @@ if (typeof(window.ssrClashResetDefaults) !== "function") {
 
 		if (modalCloseBtn) {
 			modalCloseBtn.onclick = closePanel;
+		}
+
+		var nav = $('ssr-clash-nav');
+		if (nav) {
+			nav.addEventListener('click', function(ev) {
+				var item = navItemOf(ev.target);
+				if (!item) {
+					return;
+				}
+				var mode = item.getAttribute('data-mode');
+				if (mode) {
+					activateMode(mode);
+				}
+			});
 		}
 
 		if (modalMask) {
