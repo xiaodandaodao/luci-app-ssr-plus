@@ -16,10 +16,43 @@ index 425251a..b1d60f2 100644
  PKG_CONFIG_DEPENDS:= \
  	CONFIG_PACKAGE_$(PKG_NAME)_Iptables_Transparent_Proxy \
 diff --git a/luasrc/controller/shadowsocksr.lua b/luasrc/controller/shadowsocksr.lua
-index 1869b48..60272a3 100644
+index 1869b48..68e4928 100644
 --- a/luasrc/controller/shadowsocksr.lua
 +++ b/luasrc/controller/shadowsocksr.lua
-@@ -464,14 +464,23 @@ local function resolve_active_clash_sid(sid)
+@@ -17,6 +17,32 @@ local COMPONENT_HELPER = "/usr/share/shadowsocksr/update_components.sh"
+ local SERVER_DETECT_CACHE = "/tmp/ssrplus_server_detect.json"
+ local SERVER_DETECT_LOCK = "/tmp/ssrplus_server_detect.lock"
+ local CLASH_RULES_DIR = "/etc/ssrplus/clash"
++local CLASH_WORKDIR_ROOT = "/var/etc/ssrplus/clash-"
++local CUSTOM_GROUPS_FILE = "/etc/ssrplus/custom_groups.conf"
++local CLASH_YAML_HELPER = "/usr/share/shadowsocksr/clash_yaml.lua"
++
++-- 不是真节点，面板里不该当成可选出口
++local NON_NODE_NAMES = {
++	DIRECT = true, REJECT = true, ["REJECT-DROP"] = true, PASS = true,
++	["PASS-RULE"] = true, GLOBAL = true, COMPATIBLE = true
++}
++
++-- 订阅里的「伪节点」：显示剩余流量 / 到期时间，本地秒回，混进去必被选中
++local INFO_NODE_PATTERNS = {
++	"^traffic[%s:：]", "^expire[%s:：]", "^剩余流量", "^到期",
++	"^套餐", "^官网", "^公告", "^tg群"
++}
++
++local function is_info_node(name)
++	local lower = tostring(name):lower()
++	for _, pattern in ipairs(INFO_NODE_PATTERNS) do
++		if lower:find(pattern) then
++			return true
++		end
++	end
++	return false
++end
++
+ local SUPPORTED_COMPONENTS = {
+ 	mainprogram = true,
+ 	xray = true,
+@@ -464,14 +490,23 @@ local function resolve_active_clash_sid(sid)
  	return nil
  end
  
@@ -45,7 +78,7 @@ index 1869b48..60272a3 100644
  		luci.util.shellquote("Content-Type: application/json"),
  		luci.util.shellquote("Authorization: Bearer " .. secret),
  		method,
-@@ -516,6 +525,121 @@ local function parse_clash_groups(raw)
+@@ -516,6 +551,124 @@ local function parse_clash_groups(raw)
  	return groups
  end
  
@@ -115,8 +148,10 @@ index 1869b48..60272a3 100644
 +	end
 +	for name, proxy in pairs(proxies) do
 +		if type(proxy) == "table" and type(proxy.all) == "table" and #proxy.all > 0 then
-+			local members = {}
-+			for _, member in ipairs(proxy.all) do
++		local members = {}
++		for _, member in ipairs(proxy.all) do
++			-- 订阅里的「剩余流量 / 到期时间」这类伪节点不是出口，别显示成可选节点
++			if not is_info_node(member) then
 +				local mp = proxies[member]
 +				local leaf = resolve_clash_leaf(proxies, member, 0)
 +				members[#members + 1] = {
@@ -130,7 +165,8 @@ index 1869b48..60272a3 100644
 +					auto = AUTO_SELECT_TYPES[tostring((type(mp) == "table" and mp.type) or "")] == true
 +				}
 +			end
-+			table.sort(members, function(a, b) return tostring(a.name) < tostring(b.name) end)
++		end
++		table.sort(members, function(a, b) return tostring(a.name) < tostring(b.name) end)
 +
 +			local now = proxy.now or ""
 +			local leaf = resolve_clash_leaf(proxies, now ~= "" and now or name, 0)
@@ -167,7 +203,7 @@ index 1869b48..60272a3 100644
  local function parse_kv_output(raw)
  	local data = {}
  	for line in tostring(raw or ""):gmatch("[^\r\n]+") do
-@@ -679,6 +803,7 @@ function index()
+@@ -679,9 +832,12 @@ function index()
  	entry({"admin", "services", "shadowsocksr", "delete"}, call("act_delete"))
  	entry({"admin", "services", "shadowsocksr", "clash_panel"}, call("clash_panel")).leaf = true
  	entry({"admin", "services", "shadowsocksr", "clash_groups"}, call("clash_groups")).leaf = true
@@ -175,7 +211,12 @@ index 1869b48..60272a3 100644
  	entry({"admin", "services", "shadowsocksr", "clash_switch"}, call("clash_switch")).leaf = true
  	entry({"admin", "services", "shadowsocksr", "clash_refresh"}, call("clash_refresh")).leaf = true
  	entry({"admin", "services", "shadowsocksr", "clash_reset_defaults"}, call("clash_reset_defaults")).leaf = true
-@@ -1101,19 +1226,83 @@ end
++	entry({"admin", "services", "shadowsocksr", "clash_custom_groups"}, call("clash_custom_groups")).leaf = true
++	entry({"admin", "services", "shadowsocksr", "clash_custom_group_save"}, call("clash_custom_group_save")).leaf = true
+ 	entry({"admin", "services", "shadowsocksr", "clash_client_policies"}, call("clash_client_policies")).leaf = true
+ 	entry({"admin", "services", "shadowsocksr", "clash_client_rule_save"}, call("clash_client_rule_save")).leaf = true
+ 	entry({"admin", "services", "shadowsocksr", "clash_client_rule_clear"}, call("clash_client_rule_clear")).leaf = true
+@@ -1101,19 +1257,83 @@ end
  function clash_groups()
  	local sid = luci.http.formvalue("sid")
  	local groups = {}
@@ -263,6 +304,190 @@ index 1869b48..60272a3 100644
  	})
  end
  
+@@ -1192,6 +1412,183 @@ function clash_reset_defaults()
+ 	})
+ end
+ 
++-- ---------------------------------------------------------------------------
++-- 自定义节点组
++--
++-- 定义存在 /etc/ssrplus/custom_groups.conf，一行一组：
++--   <组名> \t <select|url-test> \t <关键字1,关键字2,...>
++-- 节点匹配用「关键字包含」而不是全等：订阅一更新节点编号就变，写死全等下次就空了。
++-- ---------------------------------------------------------------------------
++
++local function read_custom_group_defs()
++	local defs = {}
++	local data = nixio.fs.readfile(CUSTOM_GROUPS_FILE)
++	if not data or data == "" then
++		return defs
++	end
++	for line in tostring(data):gmatch("[^\r\n]+") do
++		local name, gtype, keywords = line:match("^([^\t]+)\t?([^\t]*)\t?([^\t]*)")
++		if name and name ~= "" then
++			local words = {}
++			for word in tostring(keywords or ""):gmatch("[^,]+") do
++				words[#words + 1] = word
++			end
++			defs[#defs + 1] = {
++				name = name,
++				type = (gtype == "url-test" or gtype == "fallback") and gtype or "select",
++				keywords = words
++			}
++		end
++	end
++	return defs
++end
++
++local function write_custom_group_defs(defs)
++	local lines = {}
++	for _, def in ipairs(defs) do
++		lines[#lines + 1] = table.concat({
++			def.name, def.type, table.concat(def.keywords or {}, ",")
++		}, "\t")
++	end
++	nixio.fs.writefile(CUSTOM_GROUPS_FILE, #lines > 0 and (table.concat(lines, "\n") .. "\n") or "")
++end
++
++-- 列出可选的真实节点 + 已定义的自定义组（附带实际命中的节点）
++function clash_custom_groups()
++	local sid = luci.http.formvalue("sid")
++	local active_sid = resolve_active_clash_sid(sid)
++	local nodes = {}
++	local defs = read_custom_group_defs()
++
++	if active_sid then
++		local proxies = clash_proxy_map(active_sid)
++		if proxies then
++			for name, proxy in pairs(proxies) do
++				if type(proxy) == "table"
++					and not (type(proxy.all) == "table" and #proxy.all > 0)
++					and not NON_NODE_NAMES[name]
++					and not is_info_node(name) then
++					nodes[#nodes + 1] = name
++				end
++			end
++			table.sort(nodes)
++		end
++	end
++
++	for _, def in ipairs(defs) do
++		local matched = {}
++		for _, node in ipairs(nodes) do
++			local lower = node:lower()
++			for _, key in ipairs(def.keywords) do
++				if lower:find(tostring(key):lower(), 1, true) then
++					matched[#matched + 1] = node
++					break
++				end
++			end
++		end
++		def.matched = matched
++		def.count = #matched
++	end
++
++	luci.http.prepare_content("application/json")
++	luci.http.write_json({
++		active = active_sid ~= nil,
++		sid = active_sid,
++		nodes = nodes,
++		defs = defs
++	})
++end
++
++function clash_custom_group_save()
++	local sid = luci.http.formvalue("sid")
++	local active_sid = resolve_active_clash_sid(sid)
++	if not active_sid then
++		luci.http.status(409, "Conflict")
++		luci.http.prepare_content("application/json")
++		luci.http.write_json({ success = false, message = "inactive" })
++		return
++	end
++
++	local name = luci.util.trim(tostring(luci.http.formvalue("name") or ""))
++	local remove = luci.http.formvalue("remove") == "1"
++	if name == "" then
++		luci.http.status(400, "Bad Request")
++		luci.http.prepare_content("application/json")
++		luci.http.write_json({ success = false, message = "missing name" })
++		return
++	end
++
++	local defs = read_custom_group_defs()
++	if remove then
++		local kept = {}
++		for _, def in ipairs(defs) do
++			if def.name ~= name then
++				kept[#kept + 1] = def
++			end
++		end
++		defs = kept
++	else
++		local keywords = {}
++		for word in tostring(luci.http.formvalue("keywords") or ""):gmatch("[^,]+") do
++			keywords[#keywords + 1] = luci.util.trim(word)
++		end
++		if #keywords == 0 then
++			luci.http.status(400, "Bad Request")
++			luci.http.prepare_content("application/json")
++			luci.http.write_json({ success = false, message = "missing keywords" })
++			return
++		end
++		local gtype = luci.http.formvalue("type") == "url-test" and "url-test" or "select"
++		local replaced = false
++		for _, def in ipairs(defs) do
++			if def.name == name then
++				def.type = gtype
++				def.keywords = keywords
++				replaced = true
++				break
++			end
++		end
++		if not replaced then
++			defs[#defs + 1] = { name = name, type = gtype, keywords = keywords }
++		end
++	end
++	write_custom_group_defs(defs)
++
++	-- 重新生成运行时配置，复用 init.d 的同两步（raw/overlay 已在原位）
++	local workdir = CLASH_WORKDIR_ROOT .. active_sid
++	local runtime = workdir .. "/config.yaml"
++	local helper = string.format("/usr/bin/lua %s", luci.util.shellquote(CLASH_YAML_HELPER))
++	local regen = luci.sys.call(string.format("%s merge %s %s %s >/dev/null 2>&1",
++		helper,
++		luci.util.shellquote(workdir .. "/raw.yaml"),
++		luci.util.shellquote(workdir .. "/overlay.yaml"),
++		luci.util.shellquote(runtime)))
++	if regen ~= 0 then
++		luci.http.prepare_content("application/json")
++		luci.http.write_json({ success = false, message = "regen_failed" })
++		return
++	end
++	luci.sys.call(string.format("%s append_client_policy_rules %s %s >/dev/null 2>&1",
++		helper, luci.util.shellquote(runtime), luci.util.shellquote(active_sid)))
++
++	-- 热重载：mihomo 原生接口，不重启进程、不重播连接
++	local body = string.format('{"path":"%s"}', runtime)
++	local ret = clash_api_request(active_sid, "PUT", "/configs?force=true", body, 20)
++	local ok = ret ~= nil and ret.code ~= nil and ret.code >= 200 and ret.code < 300
++	local restarted = false
++	if not ok then
++		luci.sys.call("/etc/init.d/shadowsocksr restart >/dev/null 2>&1 &")
++		restarted = true
++	end
++
++	luci.http.prepare_content("application/json")
++	luci.http.write_json({
++		success = ok,
++		restarted = restarted,
++		code = ret and ret.code or nil
++	})
++end
++
+ function clash_client_policies()
+ 	local sid = luci.http.formvalue("sid")
+ 	local active_sid = resolve_active_clash_sid(sid)
 diff --git a/luasrc/model/cbi/shadowsocksr/component.lua b/luasrc/model/cbi/shadowsocksr/component.lua
 index 8d670cd..9d6daaf 100644
 --- a/luasrc/model/cbi/shadowsocksr/component.lua
@@ -328,10 +553,10 @@ index e7b13fa..fa1facf 100644
  s:append(cbi.Template("shadowsocksr/subscribe_schedule_compact"))
 diff --git a/luasrc/view/shadowsocksr/clash_groups_ui.htm b/luasrc/view/shadowsocksr/clash_groups_ui.htm
 new file mode 100644
-index 0000000..34e55c4
+index 0000000..59de39d
 --- /dev/null
 +++ b/luasrc/view/shadowsocksr/clash_groups_ui.htm
-@@ -0,0 +1,1210 @@
+@@ -0,0 +1,1493 @@
 +<%
 +-- ============================================================================
 +-- 共享组件：Mihomo / Clash 策略组面板（现代卡片式 UI）
@@ -343,7 +568,7 @@ index 0000000..34e55c4
 +--       statusEl:  状态文字元素（可选）,
 +--       sid:       订阅节点 id,
 +--       xhr:       JSON XHR 封装（window.ssrXHR / XHR）,
-+--       urls:      { groups, switch, delayTest }
++--       urls:      { groups, switch, delayTest, customGroups, customSave }
 +--   });
 +--   ui.setSid(sid); ui.load();
 +-- ============================================================================
@@ -934,6 +1159,74 @@ index 0000000..34e55c4
 +		.ssr-clash-ui .scui-node-name { max-width: 108px; }
 +		.ssr-clash-ui .scui-card-head { flex-wrap: wrap; }
 +	}
++
++	/* ------------------------------------------------ 自定义节点组编辑区 */
++	.ssr-clash-ui .scui-editor,
++	.scui-page .scui-editor { margin-bottom: 12px; }
++
++	.ssr-clash-ui .scui-editor-row,
++	.scui-page .scui-editor-row { display: flex; gap: 8px; margin-bottom: 8px; }
++
++	.ssr-clash-ui .scui-editor-row input,
++	.scui-page .scui-editor-row input { flex: 1 1 auto; min-width: 0; }
++
++	.ssr-clash-ui .scui-editor input,
++	.ssr-clash-ui .scui-editor select,
++	.ssr-clash-ui .scui-editor textarea,
++	.scui-page .scui-editor input,
++	.scui-page .scui-editor select,
++	.scui-page .scui-editor textarea {
++		padding: 6px 9px;
++		border: 1px solid var(--scui-line-strong);
++		border-radius: 8px;
++		background: var(--scui-surface);
++		color: var(--scui-fg);
++		font-family: inherit;
++		font-size: 13px;
++	}
++
++	.ssr-clash-ui .scui-kw,
++	.scui-page .scui-kw { width: 100%; resize: vertical; margin-bottom: 6px; }
++
++	.ssr-clash-ui .scui-hint,
++	.scui-page .scui-hint {
++		color: var(--scui-muted);
++		font-size: 12px;
++		line-height: 1.5;
++		margin-bottom: 8px;
++	}
++
++	.ssr-clash-ui .scui-picklist,
++	.scui-page .scui-picklist {
++		display: flex;
++		flex-wrap: wrap;
++		gap: 6px;
++		margin-bottom: 8px;
++	}
++
++	.ssr-clash-ui .scui-picklist-tall,
++	.scui-page .scui-picklist-tall {
++		max-height: 220px;
++		overflow-y: auto;
++		padding: 2px;
++	}
++
++	.ssr-clash-ui .scui-editor .scui-node,
++	.scui-page .scui-editor .scui-node { cursor: pointer; }
++
++	.ssr-clash-ui .scui-node-del,
++	.scui-page .scui-node-del {
++		display: inline-flex;
++		margin-left: 4px;
++		opacity: 0.55;
++		cursor: pointer;
++	}
++
++	.ssr-clash-ui .scui-node-del:hover,
++	.scui-page .scui-node-del:hover { opacity: 1; }
++
++	.ssr-clash-ui .scui-editor-actions,
++	.scui-page .scui-editor-actions { display: flex; gap: 8px; }
 +</style>
 +
 +<script type="text/javascript">
@@ -969,7 +1262,24 @@ index 0000000..34e55c4
 +		fastest:     '<%:Fastest:%>',
 +		emptyTitle:  '<%:No switchable proxy groups found.%>',
 +
-+		autoRegionOffHint: '<%:Turn on "Mihomo Smart Grouping and Auto Select" on the Servers page first.%>'
++		autoRegionOffHint: '<%:Turn on "Mihomo Smart Grouping and Auto Select" on the Servers page first.%>',
++
++		addGroup:    '<%:+ Custom Group%>',
++		customGroups: '<%:Custom Groups%>',
++		groupNamePh: '<%:Group name%>',
++		typeSelect:  '<%:Manual select%>',
++		typeUrlTest: '<%:Auto pick fastest%>',
++		kwPh:        '<%:Keywords, comma separated%>',
++		kwHint:      '<%:Nodes are matched by keyword, so the group survives subscription updates. Pick nodes below, or type keywords directly.%>',
++		filterNodesPh: '<%:Filter nodes...%>',
++		pickedCount: '<%:%d picked%>',
++		save:        '<%:Save%>',
++		cancel:      '<%:Cancel%>',
++		saving:      '<%:Saving and reloading...%>',
++		saved:       '<%:Saved. Mihomo reloaded without restarting.%>',
++		saveFailed:  '<%:Save failed.%>',
++		needNameNodes: '<%:Need a group name and at least one node.%>',
++		deleteGroup: '<%:Delete this group%>'
 +	};
 +
 +	var TRANSLATE = {
@@ -1005,7 +1315,9 @@ index 0000000..34e55c4
 +		search: '<circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-3.6-3.6"/>',
 +		check: '<polyline points="20 6 9 17 4 12"/>',
 +		inbox: '<path d="M3 13h4l1.5 3h7L17 13h4"/><path d="M5 5h14l2 8v6H3v-6z"/>',
-+		group: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>'
++		group: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
++		plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
++		trash: '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/>'
 +	};
 +
 +	// ------------------------------------------------------------------ 工具
@@ -1130,6 +1442,12 @@ index 0000000..34e55c4
 +		var filterText = '';
 +		var expandedGroups = {};
 +
++		// 自定义节点组：草稿状态 + 可选节点 / 已有定义
++		var custom = {
++			open: false, busy: false, defs: [], nodes: [],
++			name: '', type: 'select', keywords: [], filter: ''
++		};
++
 +		if (!mount) {
 +			return null;
 +		}
@@ -1172,8 +1490,17 @@ index 0000000..34e55c4
 +			refreshBtn.type = 'button';
 +			refreshBtn.appendChild(icon('refresh'));
 +			refreshBtn.appendChild(el('span', null, TEXT.refresh));
-+			refreshBtn.onclick = function() { load(); };
-+			left.appendChild(refreshBtn);
++		refreshBtn.onclick = function() { load(); };
++		left.appendChild(refreshBtn);
++
++		if (urls.customGroups) {
++			var customBtn = el('button', 'scui-btn');
++			customBtn.type = 'button';
++			customBtn.appendChild(icon('plus'));
++			customBtn.appendChild(el('span', null, TEXT.addGroup));
++			customBtn.onclick = function() { openEditor(null); };
++			left.appendChild(customBtn);
++		}
 +
 +			var search = el('span', 'scui-search');
 +			search.appendChild(icon('search'));
@@ -1418,6 +1745,182 @@ index 0000000..34e55c4
 +			return box;
 +		}
 +
++		// ---- 自定义节点组
++		function loadCustom() {
++			if (!xhr || !urls.customGroups) {
++				return;
++			}
++			xhr.get(urls.customGroups, { sid: sid }, function(x, result) {
++				if (result && result.active) {
++					custom.defs = result.defs || [];
++					custom.nodes = result.nodes || [];
++				}
++			});
++		}
++
++		function openEditor(def) {
++			custom.open = true;
++			custom.name = def ? def.name : '';
++			custom.type = def ? def.type : 'select';
++			custom.keywords = def ? (def.keywords || []).slice() : [];
++			custom.filter = '';
++			paint();
++		}
++
++		function saveCustom(params) {
++			if (custom.busy || !xhr || !urls.customSave) {
++				return;
++			}
++			if (!params.remove && (!params.name || !params.keywords.length)) {
++				err(TEXT.needNameNodes);
++				return;
++			}
++			custom.busy = true;
++			busy(TEXT.saving);
++			var data = { sid: sid, name: params.name };
++			if (params.remove) {
++				data.remove = '1';
++			} else {
++				data.type = params.type;
++				data.keywords = params.keywords.join(',');
++			}
++			var done = function(x, result) {
++				custom.busy = false;
++				if (result && result.success) {
++					ok(TEXT.saved);
++					custom.open = false;
++					load();
++				} else {
++					err(TEXT.saveFailed);
++				}
++			};
++			if (typeof xhr.post === 'function') {
++				xhr.post(urls.customSave, data, done);
++			} else {
++				xhr.get(urls.customSave, data, done);
++			}
++		}
++
++		function buildEditor() {
++			var box = el('section', 'scui-card scui-editor');
++
++			var head = el('div', 'scui-card-head');
++			head.appendChild(el('span', 'scui-card-name', TEXT.customGroups));
++			box.appendChild(head);
++
++			// 已有组：点名字改，点垃圾桶删
++			if (custom.defs.length) {
++				var defined = el('div', 'scui-picklist');
++				custom.defs.forEach(function(def) {
++					var chip = el('span', 'scui-node');
++					chip.title = TEXT.customGroups;
++					chip.appendChild(el('span', 'scui-node-name', def.name));
++					chip.appendChild(el('span', 'scui-node-ms', tpl(TEXT.pickedCount, def.count || 0)));
++					chip.onclick = function() { openEditor(def); };
++
++					var del = el('span', 'scui-node-del');
++					del.title = TEXT.deleteGroup;
++					del.appendChild(icon('trash'));
++					del.onclick = function(e) {
++						if (e.stopPropagation) { e.stopPropagation(); }
++						saveCustom({ name: def.name, remove: true });
++					};
++					chip.appendChild(del);
++					defined.appendChild(chip);
++				});
++				box.appendChild(defined);
++			}
++
++			var row = el('div', 'scui-editor-row');
++			var nameInput = el('input');
++			nameInput.type = 'text';
++			nameInput.value = custom.name;
++			nameInput.placeholder = TEXT.groupNamePh;
++			nameInput.oninput = function() { custom.name = nameInput.value; };
++			row.appendChild(nameInput);
++
++			var typeSel = el('select');
++			[['select', TEXT.typeSelect], ['url-test', TEXT.typeUrlTest]].forEach(function(pair) {
++				var opt = el('option', null, pair[1]);
++				opt.value = pair[0];
++				if (custom.type === pair[0]) { opt.selected = true; }
++				typeSel.appendChild(opt);
++			});
++			typeSel.onchange = function() { custom.type = typeSel.value; };
++			row.appendChild(typeSel);
++			box.appendChild(row);
++
++			var kw = el('textarea', 'scui-kw');
++			kw.rows = 2;
++			kw.value = custom.keywords.join(', ');
++			kw.placeholder = TEXT.kwPh;
++			kw.oninput = function() {
++				custom.keywords = String(kw.value).split(',').map(function(s) {
++					return s.trim();
++				}).filter(function(s) { return s !== ''; });
++				paintPickList();
++			};
++			box.appendChild(kw);
++			box.appendChild(el('div', 'scui-hint', TEXT.kwHint));
++
++			var search = el('input');
++			search.type = 'text';
++			search.value = custom.filter;
++			search.placeholder = TEXT.filterNodesPh;
++			search.oninput = function() { custom.filter = search.value; paintPickList(); };
++			box.appendChild(search);
++
++			var pickList = el('div', 'scui-picklist scui-picklist-tall');
++			box.appendChild(pickList);
++
++			function paintPickList() {
++				pickList.innerHTML = '';
++				var needle = custom.filter.trim().toLowerCase();
++				custom.nodes.forEach(function(node) {
++					if (needle && node.toLowerCase().indexOf(needle) < 0) {
++						return;
++					}
++					var picked = custom.keywords.some(function(k) {
++						return k.toLowerCase() === node.toLowerCase();
++					});
++					var chip = el('span', 'scui-node' + (picked ? ' is-current' : ''));
++					if (picked) { chip.appendChild(icon('check')); }
++					chip.appendChild(el('span', 'scui-node-name', translateName(node)));
++					chip.onclick = function() {
++						if (picked) {
++							custom.keywords = custom.keywords.filter(function(k) {
++								return k.toLowerCase() !== node.toLowerCase();
++							});
++						} else {
++							custom.keywords.push(node);
++						}
++						kw.value = custom.keywords.join(', ');
++						paintPickList();
++					};
++					pickList.appendChild(chip);
++				});
++			}
++			paintPickList();
++
++			var actions = el('div', 'scui-editor-actions');
++			var saveBtn = el('button', 'scui-btn scui-btn-primary');
++			saveBtn.type = 'button';
++			saveBtn.appendChild(el('span', null, TEXT.save));
++			saveBtn.onclick = function() {
++				saveCustom({ name: custom.name, type: custom.type, keywords: custom.keywords });
++			};
++			actions.appendChild(saveBtn);
++
++			var cancelBtn = el('button', 'scui-btn');
++			cancelBtn.type = 'button';
++			cancelBtn.appendChild(el('span', null, TEXT.cancel));
++			cancelBtn.onclick = function() { custom.open = false; paint(); };
++			actions.appendChild(cancelBtn);
++			box.appendChild(actions);
++
++			return box;
++		}
++
 +		// ---- 绘制
 +		function paint() {
 +			if (!mount) {
@@ -1430,6 +1933,9 @@ index 0000000..34e55c4
 +			}
 +
 +			mount.appendChild(buildToolbar());
++			if (custom.open) {
++				mount.appendChild(buildEditor());
++			}
 +
 +			var needle = filterText.trim().toLowerCase();
 +			var visible = needle ? groups.filter(function(group) {
@@ -1508,11 +2014,12 @@ index 0000000..34e55c4
 +					mount.appendChild(buildEmpty(TEXT.notActive));
 +					return;
 +				}
-+				testUrl = result.test_url || '';
-+				testInterval = result.test_interval || '';
-+				groups = result.groups || [];
-+				ok();
-+				paint();
++			testUrl = result.test_url || '';
++			testInterval = result.test_interval || '';
++			groups = result.groups || [];
++			ok();
++			paint();
++			loadCustom();
 +			});
 +		}
 +
@@ -1525,10 +2032,11 @@ index 0000000..34e55c4
 +			busy: busy,
 +			warn: warn,
 +			err: err,
-+			reset: function() {
-+				groups = [];
-+				filterText = '';
-+				expandedGroups = {};
++		reset: function() {
++			groups = [];
++			filterText = '';
++			expandedGroups = {};
++			custom.open = false;
 +				if (mount) { mount.innerHTML = ''; }
 +			}
 +		};
@@ -1543,10 +2051,10 @@ index 0000000..34e55c4
 +})();
 +</script>
 diff --git a/luasrc/view/shadowsocksr/clash_main_panel.htm b/luasrc/view/shadowsocksr/clash_main_panel.htm
-index 9a0f845..b228119 100644
+index 9a0f845..6b2c461 100644
 --- a/luasrc/view/shadowsocksr/clash_main_panel.htm
 +++ b/luasrc/view/shadowsocksr/clash_main_panel.htm
-@@ -4,1124 +4,1091 @@ local clash_nodes = self.clash_nodes or {}
+@@ -4,1124 +4,1093 @@ local clash_nodes = self.clash_nodes or {}
  local current_sid = self.map:get(section, "global_server") or "nil"
  -%>
  <div id="ssr-clash-main-panel-wrap">
@@ -2136,7 +2644,9 @@ index 9a0f845..b228119 100644
 +		urls: {
 +			groups: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_groups")%>',
 +			switch: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_switch")%>',
-+			delayTest: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_delay_test")%>'
++			delayTest: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_delay_test")%>',
++			customGroups: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_custom_groups")%>',
++			customSave: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_custom_group_save")%>'
  		}
 +	});
  
@@ -3628,10 +4138,10 @@ index 9a0f845..b228119 100644
 +</script>
  <%+cbi/valuefooter%>
 diff --git a/luasrc/view/shadowsocksr/clash_panel.htm b/luasrc/view/shadowsocksr/clash_panel.htm
-index 9d5cb76..eebb855 100644
+index 9d5cb76..379455e 100644
 --- a/luasrc/view/shadowsocksr/clash_panel.htm
 +++ b/luasrc/view/shadowsocksr/clash_panel.htm
-@@ -1,102 +1,39 @@
+@@ -1,102 +1,41 @@
  <%+header%>
  
 -<h2><%:Clash Panel%> - <%=alias%></h2>
@@ -3686,7 +4196,9 @@ index 9d5cb76..eebb855 100644
 +		urls: {
 +			groups: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_groups")%>',
 +			switch: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_switch")%>',
-+			delayTest: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_delay_test")%>'
++			delayTest: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_delay_test")%>',
++			customGroups: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_custom_groups")%>',
++			customSave: '<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_custom_group_save")%>'
  		}
 +	});
  
@@ -3857,10 +4369,159 @@ index a1d040d..774579f 100644
  						</div>
  						<div class="component-select-item">
 diff --git a/po/templates/ssr-plus.pot b/po/templates/ssr-plus.pot
-index baaf4cd..4f513d3 100644
+index baaf4cd..c6a0bb4 100644
 --- a/po/templates/ssr-plus.pot
 +++ b/po/templates/ssr-plus.pot
-@@ -2660,9 +2660,9 @@ msgstr ""
+@@ -8,6 +8,14 @@ msgid ""
+ "fragmentation."
+ msgstr ""
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:716
++msgid "%d picked"
++msgstr ""
++
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:708
++msgid "+ Custom Group"
++msgstr ""
++
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/server.lua:103
+ msgid "0"
+ msgstr ""
+@@ -260,6 +268,10 @@ msgstr ""
+ msgid "Auto Update Server subscription, GFW list and CHN route"
+ msgstr ""
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:712
++msgid "Auto pick fastest"
++msgstr ""
++
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:918
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:1720
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:1736
+@@ -335,6 +347,10 @@ msgstr ""
+ msgid "Camouflage Type"
+ msgstr ""
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:718
++msgid "Cancel"
++msgstr ""
++
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/server-config.lua:229
+ msgid "Certificate File Path"
+ msgstr ""
+@@ -599,6 +615,10 @@ msgid ""
+ "(tcp://8.8.8.8 or tls://dns.google:853)"
+ msgstr ""
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:709
++msgid "Custom Groups"
++msgstr ""
++
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:625
+ msgid "Custom Plugin Path"
+ msgstr ""
+@@ -725,6 +745,10 @@ msgstr ""
+ msgid "Delete failed:"
+ msgstr ""
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:723
++msgid "Delete this group"
++msgstr ""
++
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/control.lua:112
+ msgid "Deny Domain List"
+ msgstr ""
+@@ -1047,6 +1071,10 @@ msgstr ""
+ msgid "Filter Words splited by /"
+ msgstr ""
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:715
++msgid "Filter nodes..."
++msgstr ""
++
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:1389
+ msgid "FinalMask"
+ msgstr ""
+@@ -1193,6 +1221,10 @@ msgstr ""
+ msgid "Grant UCI access for luci-app-ssr-plus"
+ msgstr ""
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:710
++msgid "Group name"
++msgstr ""
++
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:1224
+ msgid "Gun"
+ msgstr ""
+@@ -1440,6 +1472,10 @@ msgstr ""
+ msgid "KcpTun Version"
+ msgstr ""
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:713
++msgid "Keywords, comma separated"
++msgstr ""
++
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/control.lua:32
+ msgid "LAN Access Control"
+ msgstr ""
+@@ -1577,6 +1613,10 @@ msgid ""
+ "entries are included when updating all subscriptions."
+ msgstr ""
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:711
++msgid "Manual select"
++msgstr ""
++
+ #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:47
+ #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:90
+ msgid "Matching release asset not found"
+@@ -1697,6 +1737,10 @@ msgstr ""
+ msgid "Nanjing Xinfeng 114DNS (114.114.114.114)"
+ msgstr ""
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:722
++msgid "Need a group name and at least one node."
++msgstr ""
++
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:920
+ msgid "New Reno"
+ msgstr ""
+@@ -1765,6 +1809,10 @@ msgid ""
+ "the table."
+ msgstr ""
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:714
++msgid "Nodes are matched by keyword, so the group survives subscription updates. Pick nodes below, or type keywords directly."
++msgstr ""
++
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/advanced.lua:300
+ msgid "Noise"
+ msgstr ""
+@@ -2278,11 +2326,23 @@ msgstr ""
+ msgid "Save current subscribe settings"
+ msgstr ""
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:721
++msgid "Save failed."
++msgstr ""
++
+ #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/subscribe_actions_footer.htm:112
+ #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/subscribe_actions_footer.htm:135
+ msgid "Save failed:"
+ msgstr ""
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:720
++msgid "Saved. Mihomo reloaded without restarting."
++msgstr ""
++
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:719
++msgid "Saving and reloading..."
++msgstr ""
++
+ #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm:763
+ #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/subscribe_actions_footer.htm:81
+ msgid "Saving..."
+@@ -2660,9 +2720,9 @@ msgstr ""
  
  #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:6
  msgid ""
@@ -3874,10 +4535,47 @@ index baaf4cd..4f513d3 100644
  
  #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:10
 diff --git a/po/zh_Hans/ssr-plus.po b/po/zh_Hans/ssr-plus.po
-index 831ac7f..11b0531 100644
+index 831ac7f..16faa43 100644
 --- a/po/zh_Hans/ssr-plus.po
 +++ b/po/zh_Hans/ssr-plus.po
-@@ -479,6 +479,10 @@ msgstr "客户端规则已导出为 CSV 文件。"
+@@ -10,6 +10,14 @@ msgstr ""
+ "\"1-3\" 是 TCP 的流切片，应用于客户端第 1 至第 3 次写数据。\"tlshello\" 是 "
+ "TLS 握手包切片。"
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:716
++msgid "%d picked"
++msgstr "已选 %d 个"
++
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:708
++msgid "+ Custom Group"
++msgstr "+ 自定义组"
++
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/server.lua:103
+ msgid "0"
+ msgstr ""
+@@ -264,6 +272,10 @@ msgstr "自动更新"
+ msgid "Auto Update Server subscription, GFW list and CHN route"
+ msgstr "自动更新服务器订阅、GFW 列表和中国大陆 IP 段"
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:712
++msgid "Auto pick fastest"
++msgstr "自动选最快"
++
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:918
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:1720
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:1736
+@@ -339,6 +351,10 @@ msgstr "伪装域名"
+ msgid "Camouflage Type"
+ msgstr "伪装类型"
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:718
++msgid "Cancel"
++msgstr "取消"
++
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/server-config.lua:229
+ msgid "Certificate File Path"
+ msgstr "证书文件路径"
+@@ -479,6 +495,10 @@ msgstr "客户端规则已导出为 CSV 文件。"
  msgid "Client rules imported from CSV file. Click Save to apply."
  msgstr "客户端规则已从 CSV 文件导入，请点击保存生效。"
  
@@ -3888,10 +4586,68 @@ index 831ac7f..11b0531 100644
  #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm:1110
  msgid "Client supports manual IP or IP/CIDR input."
  msgstr "客户端支持手动输入 IP 或 IP/CIDR。"
-@@ -871,6 +875,30 @@ msgstr "启用 ML-DSA-65 (可选)"
+@@ -604,6 +624,10 @@ msgid ""
+ msgstr ""
+ "格式为tcp://IP:Port或tls://域名:Port (tcp://8.8.8.8或tls://dns.google:853)"
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:709
++msgid "Custom Groups"
++msgstr "自定义节点组"
++
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:625
+ msgid "Custom Plugin Path"
+ msgstr "自定义插件路径"
+@@ -734,6 +758,10 @@ msgstr "删除所有订阅节点"
+ msgid "Delete failed:"
+ msgstr "删除失败："
+ 
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:723
++msgid "Delete this group"
++msgstr "删除这个组"
++
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/control.lua:112
+ msgid "Deny Domain List"
+ msgstr "禁止连接的域名"
+@@ -871,6 +899,66 @@ msgstr "启用 ML-DSA-65 (可选)"
  msgid "Enable Mihomo core"
  msgstr "启用 Mihomo 核心"
  
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:715
++msgid "Filter nodes..."
++msgstr "筛选节点..."
++
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:710
++msgid "Group name"
++msgstr "组名"
++
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:713
++msgid "Keywords, comma separated"
++msgstr "关键字，逗号分隔"
++
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:711
++msgid "Manual select"
++msgstr "手动选择"
++
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:722
++msgid "Need a group name and at least one node."
++msgstr "需要填写组名，并至少选择一个节点。"
++
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:714
++msgid "Nodes are matched by keyword, so the group survives subscription updates. Pick nodes below, or type keywords directly."
++msgstr "按关键字匹配节点，订阅更新后依然有效。可以在下面勾选节点，也可以直接填关键字。"
++
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:721
++msgid "Save failed."
++msgstr "保存失败。"
++
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:720
++msgid "Saved. Mihomo reloaded without restarting."
++msgstr "已保存，Mihomo 热重载完成，无需重启。"
++
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:719
++msgid "Saving and reloading..."
++msgstr "正在保存并重载..."
++
 +#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:601
 +msgid "URL-Test Address"
 +msgstr "URL-Test 测速地址"
@@ -3919,7 +4675,7 @@ index 831ac7f..11b0531 100644
  #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:1699
  msgid ""
  "Enable Multipath TCP, need to be enabled in both server and client "
-@@ -2680,12 +2708,12 @@ msgstr "心跳包发送间隔（单位：秒）"
+@@ -2680,12 +2768,12 @@ msgstr "心跳包发送间隔（单位：秒）"
  
  #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:6
  msgid ""
@@ -3937,7 +4693,7 @@ index 831ac7f..11b0531 100644
  
  #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:10
  msgid ""
-@@ -2729,10 +2757,6 @@ msgstr "该部分目前无任何内容。"
+@@ -2729,10 +2817,6 @@ msgstr "该部分目前无任何内容。"
  msgid "Through proxy update"
  msgstr "通过代理更新"
  
@@ -3948,7 +4704,7 @@ index 831ac7f..11b0531 100644
  #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/advanced_switch_compact.htm:106
  msgid "Timeout"
  msgstr "超时"
-@@ -2910,6 +2934,26 @@ msgstr "发现可升级版本"
+@@ -2910,6 +2994,26 @@ msgstr "发现可升级版本"
  msgid "Upgrade completed"
  msgstr "升级完成"
  
@@ -3975,7 +4731,7 @@ index 831ac7f..11b0531 100644
  #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:162
  #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:315
  msgid "Upgrading..."
-@@ -3862,6 +3906,192 @@ msgstr "对被代理的 UDP/443 流量处理方式"
+@@ -3862,6 +3966,192 @@ msgstr "对被代理的 UDP/443 流量处理方式"
  #~ msgid "Include Mihomo (Clash Support)"
  #~ msgstr "包含 Mihomo（Clash 支持）"
  
@@ -4169,10 +4925,66 @@ index 831ac7f..11b0531 100644
  msgstr "空闲会话检查间隔（秒）"
  
 diff --git a/root/etc/init.d/shadowsocksr b/root/etc/init.d/shadowsocksr
-index 8ee8755..d2548e9 100755
+index 8ee8755..d2725e4 100755
 --- a/root/etc/init.d/shadowsocksr
 +++ b/root/etc/init.d/shadowsocksr
-@@ -635,6 +635,9 @@ prepare_clash_runtime_config() {
+@@ -593,6 +593,7 @@ clash_cache() {
+ 	[ "$(uci_get_by_name "$sid" type)" = "clash" ] || return 1
+ 	mkdir -p "$TMP_PATH" "$CLASH_CONFIG_DIR"
+ 	download_clash_config "$sid"
++	clean_orphan_clash_cache
+ }
+ 
+ filter_clash_yaml_proxies() {
+@@ -622,6 +623,47 @@ filter_clash_yaml_proxies() {
+ 	rm -f "$names_file" "$removed_file"
+ }
+ 
++_collect_clash_sid() {
++	local sid="$1"
++	[ "$(uci_get_by_name "$sid" type)" = "clash" ] && _orphan_keep_sids="$_orphan_keep_sids $sid"
++}
++
++# 订阅换过地址、节点删掉之后，旧缓存会一直留在 flash 上。
++# 旧版本还按订阅链接的 md5 命名，那些文件再也不会被读到，更是纯占位。
++clean_orphan_clash_cache() {
++	local file base sid keep
++	local removed=0
++
++	[ -d "$CLASH_CONFIG_DIR" ] || return 0
++
++	_orphan_keep_sids=""
++	config_load shadowsocksr
++	config_foreach _collect_clash_sid servers
++	# 拿不到节点列表就一个都不删——宁可留着垃圾，也不能把在用的订阅缓存清空
++	[ -n "$_orphan_keep_sids" ] || return 0
++
++	for file in "$CLASH_CONFIG_DIR"/*.yaml; do
++		[ -e "$file" ] || continue
++		base="${file##*/}"
++		base="${base%.yaml}"
++		keep=0
++		for sid in $_orphan_keep_sids; do
++			if [ "$base" = "$sid" ]; then
++				keep=1
++				break
++			fi
++		done
++		[ "$keep" = "1" ] && continue
++		rm -f "$file" "${file}.md5" "$CLASH_CONFIG_DIR/$base.cache.db"
++		removed=$((removed + 1))
++	done
++
++	if [ "$removed" -gt 0 ] 2>/dev/null; then
++		echolog "已清理 $removed 个失效的 Clash 订阅缓存文件。"
++	fi
++	return 0
++}
++
+ prepare_clash_runtime_config() {
+ 	local sid="$1"
+ 	local local_port="$2"
+@@ -635,6 +677,9 @@ prepare_clash_runtime_config() {
  	local merge_stats
  	local filled_groups
  	local stripped_script_rules
@@ -4182,7 +4994,7 @@ index 8ee8755..d2548e9 100755
  	local clash_secret
  	local dns_ipv4_only
  	local dns_mode
-@@ -650,6 +653,8 @@ prepare_clash_runtime_config() {
+@@ -650,6 +695,8 @@ prepare_clash_runtime_config() {
  	merge_stats=""
  	filled_groups=0
  	stripped_script_rules=0
@@ -4191,7 +5003,15 @@ index 8ee8755..d2548e9 100755
  	clash_secret="$(get_clash_api_secret "$sid")"
  	dns_ipv4_only="$(get_filter_aaaa)"
  	dns_mode="$(uci_get_by_type global pdnsd_enable 0)"
-@@ -709,12 +714,26 @@ prepare_clash_runtime_config() {
+@@ -671,6 +718,7 @@ prepare_clash_runtime_config() {
+ 		bind-address: "$(ipv6_enabled && echo '*' || echo '0.0.0.0')"
+ 		ipv6: $(ipv6_enabled && echo true || echo false)
+ 		routing-mark: $CLASH_OUTBOUND_MARK
++		log-level: warning
+ 		profile:
+ 		  store-selected: true
+ 		tun:
+@@ -709,12 +757,26 @@ prepare_clash_runtime_config() {
  	stripped_script_rules="$(printf '%s\n' "$merge_stats" | sed -n 's/.*stripped_script_rules=\([0-9][0-9]*\).*/\1/p' | tail -n1)"
  	[ -n "$filled_groups" ] || filled_groups=0
  	[ -n "$stripped_script_rules" ] || stripped_script_rules=0
@@ -4218,7 +5038,7 @@ index 8ee8755..d2548e9 100755
  
  	client_policy_stats="$(/usr/bin/lua "$CLASH_YAML_HELPER" append_client_policy_rules "$runtime_file" "$sid" 2>/dev/null)" || true
  	client_rules="$(printf '%s\n' "$client_policy_stats" | sed -n 's/.*client_rules=\([0-9][0-9]*\).*/\1/p' | tail -n1)"
-@@ -739,6 +758,71 @@ prepare_clash_runtime_config() {
+@@ -739,6 +801,71 @@ prepare_clash_runtime_config() {
  	link_mihomo_geodata "$workdir"
  }
  
@@ -4290,7 +5110,7 @@ index 8ee8755..d2548e9 100755
  resolve_global_clash_socks_port() {
  	local socks_enabled
  	local socks_server
-@@ -1011,9 +1095,12 @@ start_v2ray_with_mihomo() {
+@@ -1011,9 +1138,12 @@ start_v2ray_with_mihomo() {
  	workdir="$(get_v2ray_mihomo_workdir "$instance_key")"
  	protocol_name="$(uci_get_by_name "$sid" v2ray_protocol)"
  	[ -n "$protocol_name" ] || protocol_name="$(uci_get_by_name "$sid" type)"
@@ -4306,7 +5126,7 @@ index 8ee8755..d2548e9 100755
  }
  
  start_socks5_udp_with_ipt2socks() {
-@@ -1103,7 +1190,46 @@ ln_start_bin() {
+@@ -1103,7 +1233,46 @@ ln_start_bin() {
  		_exit 2
  	}
  	ulimit -n 1000000
@@ -4354,7 +5174,7 @@ index 8ee8755..d2548e9 100755
  }
  
  check_run_environment() {
-@@ -2487,8 +2613,13 @@ Start_Run() {
+@@ -2487,8 +2656,13 @@ Start_Run() {
  			return 1
  		}
  		clash_workdir="$(get_clash_workdir "$GLOBAL_SERVER")"
@@ -4371,10 +5191,10 @@ index 8ee8755..d2548e9 100755
  	socks5)
  		if start_socks5_redir_with_ipt2socks "$GLOBAL_SERVER" "$tcp_port" "$threads"; then
 diff --git a/root/usr/share/shadowsocksr/clash_yaml.lua b/root/usr/share/shadowsocksr/clash_yaml.lua
-index beda6d7..711dc38 100644
+index beda6d7..d3fd97f 100644
 --- a/root/usr/share/shadowsocksr/clash_yaml.lua
 +++ b/root/usr/share/shadowsocksr/clash_yaml.lua
-@@ -253,6 +253,249 @@ local function fill_empty_proxy_groups(doc)
+@@ -253,6 +253,378 @@ local function fill_empty_proxy_groups(doc)
  	return changed
  end
  
@@ -4598,6 +5418,135 @@ index beda6d7..711dc38 100644
 +	return #added, mapping
 +end
 +
++-- ---------------------------------------------------------------------------
++-- 自定义节点组
++--
++-- 机场给的分组是按地区/流媒体切好的，用户真正想用的组合（比如「只留这 5 个
++-- 最快的香港节点」）订阅里没有。这里让用户自己在面板上勾节点，存成一行文本，
++-- 每次生成运行时配置时额外插一个代理组进去。
++--
++-- 存节点名而不是节点本身：订阅一更新，节点参数全变，只有名字还算稳定。
++-- 而且匹配用「关键字包含」而不是全等——订阅里 `🇭🇰 Hong Kong | 07` 的编号每次
++-- 都可能变，写死全等的话下次更新就空了，写关键字 `hong kong` 就一直命中。
++-- ---------------------------------------------------------------------------
++
++local CUSTOM_GROUPS_FILE = "/etc/ssrplus/custom_groups.conf"
++
++local function split_tabs(line)
++	local fields = {}
++	for field in tostring(line):gmatch("[^\t]+") do
++		fields[#fields + 1] = field
++	end
++	return fields
++end
++
++-- 每行：<组名> \t <select|url-test> \t <关键字1,关键字2,...>
++local function read_custom_group_defs()
++	local data = nixio.fs.readfile(CUSTOM_GROUPS_FILE)
++	if not data or data == "" then
++		return {}
++	end
++	local defs = {}
++	for line in tostring(data):gmatch("[^\r\n]+") do
++		local fields = split_tabs(line)
++		local name = trim(fields[1] or "")
++		if name ~= "" then
++			local gtype = tostring(fields[2] or ""):lower()
++			-- 认得 url-test / fallback，其它一律当 select，写错了也不至于生成坏配置
++			if gtype ~= "url-test" and gtype ~= "fallback" then
++				gtype = "select"
++			end
++			local keywords = {}
++			for word in tostring(fields[3] or ""):gmatch("[^,]+") do
++				local key = trim(word)
++				if key ~= "" then
++					keywords[#keywords + 1] = key:lower()
++				end
++			end
++			if #keywords > 0 then
++				defs[#defs + 1] = { name = name, type = gtype, keywords = keywords }
++			end
++		end
++	end
++	return defs
++end
++
++-- 返回：注入个数、因没匹配到任何节点而跳过的组数
++local function inject_custom_groups(doc)
++	local defs = read_custom_group_defs()
++	if #defs == 0 then
++		return 0, 0
++	end
++
++	local proxy_types = collect_proxy_types(doc)
++	local candidates = {}
++	for _, proxy in ipairs(doc.proxies or {}) do
++		if type(proxy) == "table" then
++			local name = tostring(proxy.name or "")
++			if name ~= "" and selectable_member(name, proxy_types) then
++				candidates[#candidates + 1] = name
++			end
++		end
++	end
++	if #candidates == 0 then
++		return 0, #defs
++	end
++
++	local used = collect_used_names(doc)
++	local urltest = get_urltest_options()
++	-- 没开自动切换时用内置默认参数，保证 url-test 组照样能建起来
++	if not urltest then
++		urltest = { url = URLTEST_DEFAULT_URL, interval = 300, tolerance = 50 }
++	end
++
++	local added = {}
++	local empty = 0
++	for _, def in ipairs(defs) do
++		local members = {}
++		for _, name in ipairs(candidates) do
++			local lower = name:lower()
++			for _, key in ipairs(def.keywords) do
++				if lower:find(key, 1, true) then
++					members[#members + 1] = name
++					break
++				end
++			end
++		end
++		-- 空组会让 mihomo 直接拒绝整份配置，宁可跳过
++		if #members == 0 then
++			empty = empty + 1
++		else
++			local group = {
++				name = make_unique_name(def.name, used),
++				type = def.type,
++				proxies = members
++			}
++			if def.type ~= "select" then
++				group.url = urltest.url
++				group.interval = urltest.interval
++				group.tolerance = urltest.tolerance
++			end
++			added[#added + 1] = group
++		end
++	end
++
++	if #added == 0 then
++		return 0, empty
++	end
++
++	local groups = type(doc["proxy-groups"]) == "table" and doc["proxy-groups"] or {}
++	local result = {}
++	for _, group in ipairs(added) do
++		result[#result + 1] = group
++	end
++	for _, group in ipairs(groups) do
++		result[#result + 1] = group
++	end
++	doc["proxy-groups"] = result
++
++	return #added, empty
++end
++
 +-- 把 group -> 影子组 的对应关系写成 TSV，供 init.d 在启动后调用 API 应用。
 +-- 三列：<urlencoded 原组名> \t <urlencoded 影子组名> \t <影子组原名>
 +local function write_autoselect_map(output_path, mapping)
@@ -4624,23 +5573,25 @@ index beda6d7..711dc38 100644
  local function strip_incompatible_script_rules(doc)
  	local kept = {}
  	local removed = 0
-@@ -322,6 +565,7 @@ local function merge(raw_path, overlay_path, output_path)
+@@ -322,6 +694,9 @@ local function merge(raw_path, overlay_path, output_path)
  	strip_runtime_conflicts(raw_doc)
  	local filled_groups = fill_empty_proxy_groups(raw_doc)
  	local stripped_rules = strip_incompatible_script_rules(raw_doc)
 +	local injected_groups, autoselect_mapping = inject_autoselect_groups(raw_doc)
++	-- 放在影子组之后：自定义组不该再被自动挂一层影子组
++	local custom_groups, custom_empty = inject_custom_groups(raw_doc)
  	local merged = deep_merge(raw_doc, overlay_doc)
  	local ok, rendered = pcall(lyaml.dump, { merged })
  	if not ok or not rendered then
-@@ -330,7 +574,10 @@ local function merge(raw_path, overlay_path, output_path)
+@@ -330,7 +705,10 @@ local function merge(raw_path, overlay_path, output_path)
  	end
  
  	write_file(output_path, rendered)
 -	io.stdout:write(string.format("filled_groups=%d stripped_script_rules=%d\n", filled_groups, stripped_rules))
 +	local injected_applied = write_autoselect_map(output_path, autoselect_mapping)
 +	io.stdout:write(string.format(
-+		"filled_groups=%d stripped_script_rules=%d injected_autoselect=%d injected_applied=%d\n",
-+		filled_groups, stripped_rules, injected_groups, injected_applied))
++		"filled_groups=%d stripped_script_rules=%d injected_autoselect=%d injected_applied=%d injected_custom=%d custom_empty=%d\n",
++		filled_groups, stripped_rules, injected_groups, injected_applied, custom_groups, custom_empty))
  	return true
  end
  
