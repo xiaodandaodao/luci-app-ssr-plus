@@ -1,0 +1,276 @@
+name: 上游跟踪与自动发布
+
+# 每 6 小时看一眼上游 fw876/helloworld 有没有发新 tag，分三种情况处理：
+#
+#   · 上游没动，或动的不在 luci-app-ssr-plus/   → 静默结束，不留噪音
+#   · 有更新且三方合并干净                      → 合并 → 推进版本号 → 重生成补丁与载荷
+#                                                 → 推 main → 打 tag → 触发 build.yml 发 Release
+#   · 有更新但撞上我们改过的文件                → 开 PR + 发 issue，交给你裁决
+#
+# 手动触发时可以：指定同步到哪个上游 tag、只检测不落地（dry_run）、
+# 同步但不发版（no_release）。
+
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: '指定同步到的上游 tag（留空=自动取最新）'
+        required: false
+        default: ''
+      dry_run:
+        description: '只检测，不落地'
+        type: boolean
+        default: false
+      no_release:
+        description: '同步并推进版本号，但不打 tag 发版'
+        type: boolean
+        default: false
+      keep_releases:
+        description: '发版后保留最近几个 Release（0=不清理；只删 Release，tag 一律保留）'
+        required: false
+        default: '2'
+
+permissions:
+  contents: write       # 推 main、打 tag
+  pull-requests: write  # 冲突时开 PR
+  issues: write         # 冲突时发 issue
+  actions: write        # 显式触发 build.yml
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+env:
+  TZ: Asia/Shanghai
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  sync:
+    name: 跟踪上游
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            build-essential pkg-config curl jq liblua5.4-dev
+          # luaparser 给 verify.sh 校验 Lua 语法用；装不上时 verify.sh 会自己跳过该项
+          python3 -m pip install --quiet luaparser 2>/dev/null \
+            || python3 -m pip install --quiet --break-system-packages luaparser 2>/dev/null \
+            || echo "luaparser 装不上，verify.sh 会跳过该项"
+
+      - name: 准备 po2lmo（重生成载荷要用）
+        run: bash tools/deps.sh po2lmo
+
+      # ------------------------------------------------------------ 检测
+      - name: 检测上游更新
+        id: check
+        run: |
+          set +e
+          args=()
+          [ -n "${{ github.event.inputs.upstream_tag }}" ] \
+            && args+=(--upstream-tag "${{ github.event.inputs.upstream_tag }}")
+          python3 tools/auto_sync.py check "${args[@]}" --json > /tmp/check.json
+          echo "exitcode=$?" >> "$GITHUB_OUTPUT"
+          cat /tmp/check.json
+          if [ "$(jq -r '.has_update' /tmp/check.json)" = "true" ]; then
+            echo "has_update=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 无需同步
+        if: steps.check.outputs.has_update != 'true'
+        run: |
+          reason="$(jq -r '.reason // "上游无新版本"' /tmp/check.json)"
+          echo "::notice::无需同步：$reason"
+          {
+            echo "## 上游跟踪：无需同步"
+            echo
+            echo "$reason"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 试运行（只看不动）
+        if: steps.check.outputs.has_update == 'true' && github.event.inputs.dry_run == 'true'
+        run: |
+          {
+            echo "## 上游跟踪：试运行（未落地）"
+            echo
+            echo "- 基线 \`$(jq -r .base_tag /tmp/check.json)\` → 上游 \`$(jq -r .new_tag /tmp/check.json)\`"
+            echo "- PKG_RELEASE \`$(jq -r .current_release /tmp/check.json)\` → \`$(jq -r .new_release /tmp/check.json)\`（将打 tag \`$(jq -r .tag_name /tmp/check.json)\`）"
+            echo "- 风险预判：\`$(jq -r .risk /tmp/check.json)\`"
+            echo
+            echo "### 上游改动的文件"
+            jq -r '.changed_files[] | "- `\(.)`"' /tmp/check.json
+            echo
+            echo "### 其中我们也改过的"
+            jq -r '(.overlap_files // [])[] | "- `\(.)`"' /tmp/check.json
+            echo
+            echo "_去掉 dry_run 再跑一次就会真正落地。_"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ------------------------------------------------------------ 合并
+      - name: 应用上游差分
+        id: sync
+        if: steps.check.outputs.has_update == 'true' && github.event.inputs.dry_run != 'true'
+        continue-on-error: true
+        run: |
+          set +e
+          python3 tools/auto_sync.py sync "$(jq -r .new_tag /tmp/check.json)"
+          code=$?
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
+
+      # -------------------------------------------------- 冲突路径：转人工
+      - name: 冲突转人工（开 PR）
+        if: steps.sync.outputs.exitcode == '2'
+        run: |
+          NEW_TAG="$(jq -r .new_tag /tmp/check.json)"
+          NEW_REL="$(jq -r .new_release /tmp/check.json)"
+          BASE_TAG="$(jq -r .base_tag /tmp/check.json)"
+          BRANCH="sync/upstream-${NEW_TAG}"
+
+          gh label create upstream-sync --color B60205 \
+            --description "上游同步需要人工裁决" 2>/dev/null || true
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "chore: 同步上游 ${NEW_TAG}（存在冲突待裁决）"
+          git push -u origin "$BRANCH"
+
+          {
+            echo "自动同步上游 \`${BASE_TAG}\` → \`${NEW_TAG}\` 时，下面这些文件三方合并不干净："
+            echo
+            python3 tools/auto_sync.py conflicts | sed 's/^/- `/; s/$/`/'
+            echo
+            echo "## 裁决原则"
+            echo
+            echo "- 上游的 bug 修复 / 新功能 → 采纳上游"
+            echo "- 我们的改造（逐条见 [ATTRIBUTION.md](../blob/main/ATTRIBUTION.md) §2）→ 保留我们"
+            echo "- \`Makefile\` 的 \`PKG_RELEASE\` → 永远用我们的，本轮应为 \`${NEW_REL}\`"
+            echo "  （规则 \`<上游 release><两位本方修订序>\`：上游 ${NEW_TAG} 的第 1 版 = \`${NEW_REL}\`）"
+            echo
+            echo "## 收尾"
+            echo
+            echo '```bash'
+            echo "# 1. 编辑上面这些文件，清掉 <<<<<<< ======= >>>>>>> 标记"
+            echo "git add <解决后的文件> && git commit -m 'chore: 同步上游 ${NEW_TAG}'"
+            echo "bash tools/verify.sh"
+            echo "# 2. 推进版本号 + 重生成补丁与载荷"
+            echo "python3 tools/auto_sync.py finalize ${NEW_TAG} ${NEW_REL}"
+            echo "git add -A && git commit -m 'chore: 重生成补丁与注入载荷'"
+            echo "git push"
+            echo '```'
+            echo
+            echo "合并进 main 后会照常触发构建；版本号请在合并前 finalize 好。"
+          } > /tmp/pr_body.md
+
+          existing="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number' || true)"
+          if [ -n "$existing" ] && [ "$existing" != "null" ]; then
+            gh pr edit "$existing" --body-file /tmp/pr_body.md
+            echo "::warning::已存在的 PR #${existing} 内容已更新"
+            echo "pr=${existing}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh pr create --base main --head "$BRANCH" \
+              --title "chore: 同步上游 ${NEW_TAG}（存在冲突待裁决）" \
+              --body-file /tmp/pr_body.md --label upstream-sync
+          fi
+
+      - name: 冲突转人工（发 issue）
+        if: steps.sync.outputs.exitcode == '2'
+        run: |
+          NEW_TAG="$(jq -r .new_tag /tmp/check.json)"
+          PR_URL="$(gh pr view "sync/upstream-${NEW_TAG}" --json url --jq .url 2>/dev/null || echo '')"
+          existing="$(gh issue list --state open --label upstream-sync \
+                      --search "${NEW_TAG}" --json number --jq '.[0].number' || true)"
+          if [ -n "$existing" ] && [ "$existing" != "null" ]; then
+            echo "::notice::issue #${existing} 已存在，不重复创建"
+            exit 0
+          fi
+          {
+            echo "上游 \`${NEW_TAG}\` 已发布，但自动同步撞上了我们改过的文件，需要人工裁决。"
+            echo
+            [ -n "$PR_URL" ] && echo "PR：${PR_URL}"
+            echo
+            echo "冲突文件见 \`conflicts.txt\`（也列在 PR 描述里）。合并前请跑："
+            echo
+            echo '```bash'
+            echo "python3 tools/auto_sync.py finalize ${NEW_TAG} $(jq -r .new_release /tmp/check.json)"
+            echo '```'
+          } > /tmp/issue_body.md
+          gh issue create --title "上游 ${NEW_TAG} 同步存在冲突，需要人工裁决" \
+            --body-file /tmp/issue_body.md --label upstream-sync
+
+      # ------------------------------------------------ 干净路径：一路到底
+      - name: 静态校验
+        if: steps.sync.outputs.exitcode == '0'
+        run: bash tools/verify.sh
+
+      - name: 提交合并结果
+        if: steps.sync.outputs.exitcode == '0'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status --short
+          git commit -m "chore: 同步上游 $(jq -r .new_tag /tmp/check.json)"
+
+      - name: 推进版本号并重生成补丁与载荷
+        if: steps.sync.outputs.exitcode == '0'
+        run: |
+          NEW_TAG="$(jq -r .new_tag /tmp/check.json)"
+          NEW_REL="$(jq -r .new_release /tmp/check.json)"
+          python3 tools/auto_sync.py finalize "$NEW_TAG" "$NEW_REL"
+          git add -A
+          git status --short
+          git commit -m "chore: 重生成补丁与注入载荷（196-r${NEW_REL}）"
+
+      - name: 推送到 main
+        if: steps.sync.outputs.exitcode == '0'
+        run: git push origin main
+
+      - name: 打 tag 并触发构建发布
+        if: steps.sync.outputs.exitcode == '0' && github.event.inputs.no_release != 'true'
+        run: |
+          TAG_NAME="$(jq -r .tag_name /tmp/check.json)"
+          git tag "$TAG_NAME"
+          git push origin "$TAG_NAME"
+          # 用 GITHUB_TOKEN 推上去的 tag 不会再触发别的 workflow（GitHub 的防循环规则），
+          # 所以这里显式调一次 build.yml，由它完成打包并创建 Release。
+          gh workflow run build.yml --ref "$TAG_NAME"
+          {
+            echo "## 上游跟踪：已发布 ${TAG_NAME}"
+            echo
+            echo "- 基线推进到 \`$(jq -r .new_tag /tmp/check.json)\`"
+            echo "- 已触发 build.yml，产物与 Release 稍后出现在 [Releases](../../releases)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 清理旧 Release
+        if: steps.sync.outputs.exitcode == '0' && github.event.inputs.no_release != 'true'
+        run: |
+          keep="${{ github.event.inputs.keep_releases || '2' }}"
+          if [ "$keep" -le 0 ] 2>/dev/null; then
+            echo "keep_releases=0，跳过清理"
+            exit 0
+          fi
+          mapfile -t tags < <(gh release list --limit 100 --json tagName,createdAt \
+                              --jq 'sort_by(.createdAt) | reverse | .[].tagName')
+          if [ "${#tags[@]}" -le "$keep" ]; then
+            echo "当前 ${#tags[@]} 个 Release，不超过保留数 ${keep}，跳过清理"
+            exit 0
+          fi
+          echo "保留最近 ${keep} 个，删除其余 $(( ${#tags[@]} - keep )) 个 Release（tag 一律保留）"
+          for t in "${tags[@]:$keep}"; do
+            echo "  删除 $t"
+            gh release delete "$t" -y || true
+          done

@@ -136,6 +136,39 @@ bash tools/sync-upstream.sh --regen-patch v196.20
 需要移植到别人的预编译包（拿不到源码）时，走 `tools/inject_pkg.py`，
 见 [patches/README.md](./patches/README.md) 路线 B。
 
+### 自动跟踪（无人值守）
+
+上面这套手活已经接进 CI：`.github/workflows/upstream-sync.yml` 每 6 小时看一次上游
+`fw876/helloworld` 有没有发新 tag，分三种情况处理：
+
+| 上游状态 | 动作 |
+|---|---|
+| 没发新 tag，或新 tag 没动到 `luci-app-ssr-plus/` | 静默结束，不产生提交、不发通知 |
+| 有新 tag 且三方合并干净 | 全自动走完：合并 → 推进 `PKG_RELEASE` → 重生成补丁与载荷 → 刷新文档里的版本串 → 推 `main` → 打 tag `v196-r<PKG_RELEASE>` → 触发 `build.yml` 打包并发 Release |
+| 有新 tag 但撞上我们改过的文件 | 开 PR（分支 `sync/upstream-<tag>`）+ 发 issue 等你裁决，冲突文件列在 `conflicts.txt` 和 PR 描述里 |
+
+自动化的引擎是 `tools/auto_sync.py`（CI 专用、全程非交互），和给人用的
+`tools/sync-upstream.sh` 是同一套规则的两副皮：前者靠退出码表达结果
+（`0` 正常 / `2` 有冲突 / `3` 本包无变化），后者会在冲突时停下来打提示。
+发完新版后默认只保留最近 2 个 Release（只删 Release，tag 一律保留）。
+
+手动干预：在 Actions 页面手动跑 **上游跟踪与自动发布**，可用 `upstream_tag` 指定同步到
+某个 tag、`dry_run` 只看不动、`no_release` 同步但不发版、`keep_releases` 调整保留个数。
+
+冲突 PR 按上面的裁决准则处理完，收尾照 PR 描述里那段跑即可（版本号用 PR 里给的值）：
+
+```sh
+# 1. 编辑冲突文件，清掉 <<<<<<< ======= >>>>>>> 标记
+git add <解决后的文件> && git commit -m "chore: 同步上游 <上游tag>"
+bash tools/verify.sh
+# 2. 推进版本号 + 重生成补丁与载荷
+python3 tools/auto_sync.py finalize <上游tag> <新PKG_RELEASE>
+git add -A && git commit -m "chore: 重生成补丁与注入载荷"
+git push
+```
+
+合并进 `main` 后会照常触发构建发布。
+
 ## 致谢与声明
 
 包本体来自上游 `fw876/helloworld`（及其依赖的 `openwrt/luci` 等），`po2lmo` 编译自

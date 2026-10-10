@@ -256,6 +256,12 @@ prepare_apk() {
   return 0
 }
 
-prepare_po2lmo
-prepare_apk
+# 只想要其中一个时：./tools/deps.sh po2lmo  （上游同步工作流只需要 po2lmo，
+# 不必为此花几分钟编译 apk-tools —— 打包是 build.yml 的事）
+case "${1:-all}" in
+  all)    prepare_po2lmo; prepare_apk ;;
+  po2lmo) prepare_po2lmo ;;
+  apk)    prepare_apk ;;
+  *)      die "未知参数 $1（可选：po2lmo / apk，留空则两个都装）" ;;
+esac
 info "依赖准备完成"

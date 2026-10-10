@@ -15,6 +15,9 @@ node_modules/
 __pycache__/
 *.pyc
 
+# 上游自动同步产生的临时清单（冲突时给 PR/issue 用）
+conflicts.txt
+
 # 编辑器 / 系统
 .DS_Store
 *.swp
