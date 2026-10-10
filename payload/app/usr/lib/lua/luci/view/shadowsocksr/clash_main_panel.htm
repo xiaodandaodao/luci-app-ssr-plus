@@ -278,25 +278,41 @@ local current_sid = self.map:get(section, "global_server") or "nil"
 
 	/* 自定义域名规则页签 */
 	#ssr-clash-pane-domainrules .ssr-domain-rules { display: flex; flex-direction: column; gap: 10px; }
+	/* 变量只能取 clash_groups_ui.htm 里真实定义过的那套（--scui-line-strong /
+	   --scui-surface-2 / --scui-fg …）。早期这里误用了并不存在的 --scui-border 与
+	   --scui-panel-bg，回落成写死的浅色：深色主题下就变成浅底 + 继承来的浅色文字，
+	   整块规则都看不清。 */
 	#ssr-clash-pane-domainrules textarea {
 		width: 100%;
 		box-sizing: border-box;
 		min-height: 280px;
 		padding: 10px 12px;
-		border: 1px solid var(--scui-border, #d4d9e2);
+		border: 1px solid var(--scui-line-strong);
 		border-radius: 8px;
-		background: var(--scui-panel-bg, #fff);
-		color: inherit;
+		background: var(--scui-surface-2);
+		color: var(--scui-fg);
+		caret-color: var(--scui-accent);
 		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 		font-size: 12.5px;
-		line-height: 1.6;
+		line-height: 1.7;
 		resize: vertical;
 		tab-size: 2;
+		transition: border-color .15s ease, box-shadow .15s ease;
 	}
+	#ssr-clash-pane-domainrules textarea::placeholder { color: var(--scui-faint); opacity: 1; }
+	#ssr-clash-pane-domainrules textarea:hover { border-color: var(--scui-faint); }
+	#ssr-clash-pane-domainrules textarea:focus {
+		outline: none;
+		border-color: var(--scui-accent);
+		box-shadow: 0 0 0 3px var(--scui-accent-ring);
+	}
+	#ssr-clash-pane-domainrules textarea::selection { background: var(--scui-accent-ring); }
 	#ssr-clash-pane-domainrules code {
 		padding: 1px 5px;
 		border-radius: 4px;
-		background: rgba(127, 127, 127, 0.14);
+		border: 1px solid var(--scui-line);
+		background: var(--scui-surface-2);
+		color: var(--scui-fg);
 		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 	}
 	#ssr-clash-pane-domainrules .ssr-domain-rules-tools {
@@ -307,7 +323,7 @@ local current_sid = self.map:get(section, "global_server") or "nil"
 	}
 	#ssr-clash-pane-domainrules .ssr-domain-rules-hint {
 		font-size: 12px;
-		opacity: 0.72;
+		color: var(--scui-muted);
 		word-break: break-all;
 	}
 
