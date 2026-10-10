@@ -55,9 +55,9 @@ cd /path/to/ssrplus-local-build
 | `root/usr/share/shadowsocksr/shadowsocksr.config` | 新增选项的默认值 |
 | `po/zh_Hans/ssr-plus.po`、`po/templates/ssr-plus.pot` | 新增文案的中文翻译 |
 | `root/usr/share/shadowsocksr/update_components.sh` | 主程序在线升级源改指本仓库 Release；geo 升级前 `mkdir -p` 目标目录；`download_file` / `fetch_text` 增加 jsdelivr 与 GitHub 加速代理兜底；替换已失效的 `mirror.ghproxy.com` |
-| `Makefile` | `PKG_RELEASE` → `1903` |
+| `Makefile` | `PKG_RELEASE` → `1904` |
 
-> 补丁的目标是「把上游 v196.19 变成 1903」，所以除了本次的主程序源地址与下载兜底改动，也一并带上了
+> 补丁的目标是「把上游 v196.19 变成 1904」，所以除了本次的主程序源地址与下载兜底改动，也一并带上了
 > 早先的延迟可视化、自动切换与排障增强改动 —— 这些本来就是本项目相对上游的全部差异。
 
 ### 换到别的上游版本

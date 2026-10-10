@@ -178,7 +178,7 @@ __COMPONENT_STYLE__
   <div class="pv-head">
     <div>
       <div class="pv-title">Mihomo 策略组面板</div>
-      <div class="pv-sub">luci-app-ssr-plus 196-r1903 · 静态预览（离线渲染，数据为模拟）</div>
+      <div class="pv-sub">luci-app-ssr-plus 196-r1904 · 静态预览（离线渲染，数据为模拟）</div>
     </div>
     <div class="pv-spacer"></div>
     <button class="pv-toggle" id="pv-theme" type="button">切换深色</button>

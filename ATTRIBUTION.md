@@ -11,7 +11,7 @@
 | 上游仓库 | `https://github.com/fw876/helloworld` |
 | 基线 tag | **v196.19** |
 | 基线 commit | `16617be`（luci-app-ssr-plus: fix legacy SS subscription parsing with Xray） |
-| 包版本 | `luci-app-ssr-plus` `196-r1903`（上游 v196.19 为 `196-r19`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r19 的第 3 版」= `1903`（第 1 版 `1901`，第 2 版 `1902`） |
+| 包版本 | `luci-app-ssr-plus` `196-r1904`（上游 v196.19 为 `196-r19`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r19 的第 4 版」= `1904`（第 1 版 `1901`，第 2 版 `1902`，第 3 版 `1903`） |
 | 许可证 | GPL-3.0（随仓库保留上游 `LICENSE` 原文，未改动） |
 
 上游 monorepo 里 `luci-app-ssr-plus/` 是一个子目录，本仓库把它**提升为仓库根**：
@@ -40,7 +40,7 @@
 | `afb3aaf` | 可选 IPv6 流量代理：nftables IPv6 TCP/UDP 规则、AAAA 地址集、国内 IPv6 地址库（默认关闭） |
 | `16617be` | 修复 legacy SS 订阅链接在 Xray 下的解析（整段 Base64 先解码再解析端点） |
 
-冲突裁决：`Makefile` 的 `PKG_RELEASE` 取我们的（同步当时为 `1901`，现为 `1903`）；`po/zh_Hans/ssr-plus.po`
+冲突裁决：`Makefile` 的 `PKG_RELEASE` 取我们的（同步当时为 `1901`，现为 `1904`）；`po/zh_Hans/ssr-plus.po`
 两边的新增条目都保留（我们的 Clash 面板文案 + 上游 IPv6/AnyTLS 文案）。
 
 ### ①–⑦ 本仓库的改动
