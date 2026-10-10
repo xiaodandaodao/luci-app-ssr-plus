@@ -1,5 +1,5 @@
 diff --git a/Makefile b/Makefile
-index 425251a..cbe9c63 100644
+index 425251a..1ead865 100644
 --- a/Makefile
 +++ b/Makefile
 @@ -4,7 +4,11 @@ LUCI_TITLE:=luci-app-ssr-plus
@@ -8,10 +8,10 @@ index 425251a..cbe9c63 100644
  PKG_VERSION:=196
 -PKG_RELEASE:=19
 +# PKG_RELEASE 编码规则：<上游 release><两位本方修订序>
-+#   上游 v196.19 的第 1 版 = 1901，……，第 5 版 = 1905；上游升到 r20 则重新从 2001 起。
++#   上游 v196.19 的第 1 版 = 1901，……，第 6 版 = 1906；上游升到 r20 则重新从 2001 起。
 +#   必须是纯数字且单调递增 —— apk 的 "-r" 后只接受整数（RE13 这类写法会被 mkpkg 拒绝），
 +#   数字编码同时保证 opkg/apk 都会把它判定为「比旧版新」的升级。
-+PKG_RELEASE:=1905
++PKG_RELEASE:=1906
  
  PKG_CONFIG_DEPENDS:= \
  	CONFIG_PACKAGE_$(PKG_NAME)_Iptables_Transparent_Proxy \
@@ -2158,10 +2158,10 @@ index 0000000..59de39d
 +})();
 +</script>
 diff --git a/luasrc/view/shadowsocksr/clash_main_panel.htm b/luasrc/view/shadowsocksr/clash_main_panel.htm
-index 9a0f845..6793638 100644
+index 9a0f845..90c02e7 100644
 --- a/luasrc/view/shadowsocksr/clash_main_panel.htm
 +++ b/luasrc/view/shadowsocksr/clash_main_panel.htm
-@@ -4,1124 +4,1299 @@ local clash_nodes = self.clash_nodes or {}
+@@ -4,1124 +4,1301 @@ local clash_nodes = self.clash_nodes or {}
  local current_sid = self.map:get(section, "global_server") or "nil"
  -%>
  <div id="ssr-clash-main-panel-wrap">
@@ -3787,11 +3787,13 @@ index 9a0f845..6793638 100644
 +			'DOMAIN-KEYWORD,dl-a10b-,DIRECT',
 +			'DOMAIN-KEYWORD,dl-z01a-,DIRECT',
 +			'# 主站 / API / 地区检测 / 下载调度：PikPak 主动屏蔽大陆 IP，必须显式走代理。',
-+			'# pikpak.io（dl.pikpak.io 等）走 Cloudflare，国内直连会被墙，同样不能漏。',
++			'# pikpak.io / pikpak.site 是 Cloudflare 承载的下载与调度域名（104.18.x），',
++			'# 实测国内直连 10 秒以上无响应，同样不能漏。',
 +			'DOMAIN-SUFFIX,mypikpak.com,' + group,
 +			'DOMAIN-SUFFIX,mypikpak.net,' + group,
 +			'DOMAIN-SUFFIX,pikpak.me,' + group,
 +			'DOMAIN-SUFFIX,pikpak.io,' + group,
++			'DOMAIN-SUFFIX,pikpak.site,' + group,
 +			'DOMAIN-SUFFIX,pikpakdrive.com,' + group
 +		].join('\n');
 +	}
