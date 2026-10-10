@@ -4175,3 +4175,71 @@ msgstr "国内 IPv6 地址库更新地址"
 
 msgid "China IPv6 Data"
 msgstr "国内 IPv6 地址库"
+
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm
+msgid "Custom Domain Rules"
+msgstr "自定义分流规则"
+
+msgid "One Clash rule per line, injected before every rule from the subscription. Format: TYPE,ARGUMENT,POLICY — the policy must be an existing proxy group (or DIRECT / REJECT)."
+msgstr "一行一条 Clash 规则，插在订阅全部规则的最前面。格式：规则类型,参数,目标 —— 目标必须是已存在的代理组（或 DIRECT / REJECT）。"
+
+msgid "Example"
+msgstr "例如"
+
+msgid "Available targets"
+msgstr "可用目标组"
+
+msgid "Insert PikPak Template"
+msgstr "插入 PikPak 模板"
+
+msgid "The PikPak template is already present."
+msgstr "规则里已经有 PikPak 模板了"
+
+msgid "Template inserted. Click Save to apply."
+msgstr "模板已插入，点「保存」生效"
+
+msgid "Custom domain rules saved."
+msgstr "自定义分流规则已保存"
+
+msgid "Failed to save custom domain rules."
+msgstr "自定义分流规则保存失败"
+
+msgid "applied"
+msgstr "生效"
+
+msgid "skipped"
+msgstr "跳过"
+
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm
+msgid "Custom Domain Rules"
+msgstr "自定义分流规则"
+
+msgid "One Clash rule per line, injected before every rule from the subscription. Format: TYPE,ARGUMENT,POLICY — the policy must be an existing proxy group (or DIRECT / REJECT)."
+msgstr "一行一条 Clash 规则，插在订阅全部规则的最前面。格式：规则类型,参数,目标 —— 目标必须是已存在的代理组（或 DIRECT / REJECT）。"
+
+msgid "Example"
+msgstr "例如"
+
+msgid "Available targets"
+msgstr "可用目标组"
+
+msgid "Insert PikPak Template"
+msgstr "插入 PikPak 模板"
+
+msgid "The PikPak template is already present."
+msgstr "规则里已经有 PikPak 模板了"
+
+msgid "Template inserted. Click Save to apply."
+msgstr "模板已插入，点「保存」生效"
+
+msgid "Custom domain rules saved."
+msgstr "自定义分流规则已保存"
+
+msgid "Failed to save custom domain rules."
+msgstr "自定义分流规则保存失败"
+
+msgid "applied"
+msgstr "生效"
+
+msgid "skipped"
+msgstr "跳过"
