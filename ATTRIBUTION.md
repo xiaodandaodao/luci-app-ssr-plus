@@ -11,7 +11,7 @@
 | 上游仓库 | `https://github.com/fw876/helloworld` |
 | 基线 tag | **v196.19** |
 | 基线 commit | `16617be`（luci-app-ssr-plus: fix legacy SS subscription parsing with Xray） |
-| 包版本 | `luci-app-ssr-plus` `196-r1904`（上游 v196.19 为 `196-r19`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r19 的第 4 版」= `1904`（第 1 版 `1901`，第 2 版 `1902`，第 3 版 `1903`） |
+| 包版本 | `luci-app-ssr-plus` `196-r1905`（上游 v196.19 为 `196-r19`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r19 的第 5 版」= `1905`（第 1 版 `1901`，第 2 版 `1902`，第 3 版 `1903`，第 4 版 `1904`） |
 | 许可证 | GPL-3.0（随仓库保留上游 `LICENSE` 原文，未改动） |
 
 上游 monorepo 里 `luci-app-ssr-plus/` 是一个子目录，本仓库把它**提升为仓库根**：
@@ -40,12 +40,12 @@
 | `afb3aaf` | 可选 IPv6 流量代理：nftables IPv6 TCP/UDP 规则、AAAA 地址集、国内 IPv6 地址库（默认关闭） |
 | `16617be` | 修复 legacy SS 订阅链接在 Xray 下的解析（整段 Base64 先解码再解析端点） |
 
-冲突裁决：`Makefile` 的 `PKG_RELEASE` 取我们的（同步当时为 `1901`，现为 `1904`）；`po/zh_Hans/ssr-plus.po`
+冲突裁决：`Makefile` 的 `PKG_RELEASE` 取我们的（同步当时为 `1901`，现为 `1905`）；`po/zh_Hans/ssr-plus.po`
 两边的新增条目都保留（我们的 Clash 面板文案 + 上游 IPv6/AnyTLS 文案）。
 
 ### ①–⑦ 本仓库的改动
 
-以下八批改动：
+以下十批改动：
 
 ### ① 面板延迟可视化
 
@@ -153,7 +153,7 @@ LuCI 侧边栏的独立页面 —— 三处来回跳。现在合并成一个弹�
 
 > 上游 `po/zh-cn/` 目录（同内容、旧命名）未同步改动，属已知差异，不影响 lmo 生成（本仓库用 `po/zh_Hans/`）。
 
-### ⑨ 自定义节点组（轻量版）+ 面板小优化（未发版，随下次打包）
+### ⑨ 自定义节点组（轻量版）+ 面板小优化（1904）
 
 机场给的分组是按地区/流媒体切好的，用户真正想用的组合（「只留这几个香港节点」）订阅里没有。
 §③ 曾经做过一版自定义分组（uci 存储 + 弹窗，约 500 行），因为臃肿被整体下线；这一版按
@@ -184,6 +184,52 @@ LuCI 侧边栏的独立页面 —— 三处来回跳。现在合并成一个弹�
 > 后绑定的那个必然冲突。与本次改动无关，功能不受影响（实测重载后 12 条活跃连接正常、
 > 端口仍在监听），因此未在本批改动里调整端口配置。
 
+### ⑩ 自定义分流规则 + 修复域名规则在 redir 模式下失效（1905）
+
+起因是 PikPak 网盘一直提示「当前地区不可用」，而把 Final / 全局都选成香港、美国都没用。
+查下来跟「选哪个节点」无关，是两个叠在一起的问题：
+
+* **域名规则全部失效。** ssr-plus 走 nat 重定向，客户端先把域名解析成 IP 再把包送过来，
+  mihomo 拿到连接时**只有 IP、没有域名**，于是订阅里几千条 `DOMAIN-SUFFIX` / `DOMAIN-KEYWORD`
+  一条都匹配不上。AB 实测：`sniffer.parse-pure-ip` 关闭（上游默认）时 `www.google.com` 记的是
+  `match Match using Final`；打开后变成 `match DomainSuffix(google.com) using Google[...]`。
+  `Final` 是最后兜底，前面规则一条都不匹配时才会轮到，所以「在 Final 里选香港」根本不起作用。
+* **`GEOIP,CN` 误判。** PikPak 的域名解析到腾讯云海外 IP（实测 43.156.146.72 / 43.160.164.205
+  属**新加坡 AS132203**），却被本地 GeoIP 库判成 CN，命中 `GEOIP,CN,DIRECT` 直连 ——
+  而 PikPak 是国人出海的盘，主动屏蔽大陆 IP，于是回「当前地区不可用」。
+
+于是除了修好嗅探，另加一个**用户可自己插规则**的入口：写在面板里的规则会插到订阅**全部规则之前**，
+可以覆盖订阅的任何判断（包括 `GEOIP,CN`）。
+
+| 文件 | 改动 |
+|---|---|
+| `root/usr/share/shadowsocksr/clash_yaml.lua` | 新增 `enforce_sniffer()`：强制 `sniffer.enable=true` + `parse-pure-ip` + `force-dns-mapping` + `override-destination`，并补齐 TLS/HTTP 嗅探端口。`merge()` 与 `prepare()` 两条生成路径都调用 |
+| 同上 | 新增 `inject_custom_rules()`：读 `/etc/ssrplus/custom_rules.conf`（一行一条 Clash 原生规则，`#` 注释、空行忽略），插到 `doc.rules` **最前**；逐条校验目标策略是否存在，不存在就跳过并计数（目标写错时不能让 mihomo 拒收整份配置）；输出统计增加 `custom_rules=` / `custom_rules_skipped=` |
+| `luasrc/controller/shadowsocksr.lua` | 新增 `clash_custom_rules`（GET：返回当前规则 + 面板可用策略清单）与 `clash_custom_rules_save`（POST：写文件 → 重新生成 → `append_client_policy_rules` → `PUT /configs?force=true` 热重载，非 2xx 才兜底重启），回传 `injected` / `skipped` |
+| `luasrc/view/shadowsocksr/clash_main_panel.htm` | 左导航新增第 4 项「自定义分流规则」：等宽字体规则编辑框 + 「插入 PikPak 模板」按钮 + 可用目标组提示；模板默认挑 HK 组（缺省回退 Proxies / Final） |
+| `root/etc/init.d/shadowsocksr` | 修复 `_collect_clash_sid()`：本地上传 YAML 时 `clash_path` 指向 `$CLASH_CONFIG_DIR/<文件 md5>.yaml`，**文件名不是 uci section 名**，旧逻辑按 section 名保留文件会把这个配置当孤儿缓存删掉，之后重启就报「Clash 节点未配置订阅 URL/本地配置，无法启动」。现在把 `clash_path` 的基名也加进保留集合 |
+| `po/zh_Hans/ssr-plus.po`、`po/templates/ssr-plus.pot` | 新增 11 条文案；顺带清掉 po 里被追加两遍的重复条目，并把 `pot` 与 `po` 对齐（此前落后 67 条，`msgmerge` 会把它们判成 obsolete） |
+
+出厂的 `/etc/ssrplus/custom_rules.conf` 就是 PikPak 模板，顺序有讲究：
+
+```
+DOMAIN-KEYWORD,dl-a10b-,DIRECT      # 下载 CDN（dl-a10b-0858.mypikpak.com 这类），直连跑满带宽
+DOMAIN-KEYWORD,dl-z01a-,DIRECT
+DOMAIN-SUFFIX,mypikpak.com,HK       # 主站 / API / 地区检测，必须走代理
+DOMAIN-SUFFIX,mypikpak.net,HK
+DOMAIN-SUFFIX,pikpak.me,HK
+DOMAIN-SUFFIX,pikpak.io,HK          # dl.pikpak.io 等走 Cloudflare，国内直连会被墙
+DOMAIN-SUFFIX,pikpakdrive.com,HK
+```
+
+> 两条 CDN 的 `DOMAIN-KEYWORD` 必须排在 `DOMAIN-SUFFIX,mypikpak.com` **前面**，否则
+> `dl-a10b-*.mypikpak.com` 会先被后缀规则整体走代理。这套顺序与社区流传的 PikPak 规则一致。
+> 实测（主路由 192.168.1.1，真实客户端流量）：`mypikpak.com` / `user.mypikpak.com` /
+> `api-drive.mypikpak.com` / `static.mypikpak.com` 等全部命中 `DomainSuffix(mypikpak.com) using HK`，
+> 注册页不再提示「当前地区不可用」。
+> 注：`pikpak.io` 这一条是实测补上的 —— 日志里 `dl.pikpak.io:443` 曾未被任何规则命中而落到
+> `match Match using Final`，走的是当时 Final 链条上的节点（台湾），属意外行为。
+
 ## 3. 本仓库新增的非上游文件
 
 | 路径 | 说明 | 来源 / 许可 |
@@ -197,7 +243,7 @@ LuCI 侧边栏的独立页面 —— 三处来回跳。现在合并成一个弹�
 | `tools/smoke_test.js` | jsdom 无头冒烟测试（25 项断言，可抓 `node --check` 抓不到的 TEXT 漏键 → 按钮显示 `undefined` 之类） | 本项目自研 |
 | `tools/inject_pkg.py` | 无源码注入工具：把改动注入别人预编译的 ipk/apk（`make-payload` / `show` / `apply`） | 本项目自研 |
 | `patches/` | 相对上游 v196.19 的统一 diff + 移植说明 | 本项目自研 |
-| `payload/` | 注入载荷（9 个文件 + manifest.json），接收方无需源码 | 本项目自研 |
+| `payload/` | 注入载荷（12 个文件 + manifest.json），接收方无需源码 | 本项目自研 |
 
 ## 4. 构建期下载的第三方二进制（不入库）
 

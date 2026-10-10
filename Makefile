@@ -5,10 +5,10 @@ LUCI_PKGARCH:=all
 PKG_NAME:=luci-app-ssr-plus
 PKG_VERSION:=196
 # PKG_RELEASE 编码规则：<上游 release><两位本方修订序>
-#   上游 v196.19 的第 1 版 = 1901，第 2 版 = 1902，第 3 版 = 1903；上游升到 r20 则重新从 2001 起。
+#   上游 v196.19 的第 1 版 = 1901，……，第 5 版 = 1905；上游升到 r20 则重新从 2001 起。
 #   必须是纯数字且单调递增 —— apk 的 "-r" 后只接受整数（RE13 这类写法会被 mkpkg 拒绝），
 #   数字编码同时保证 opkg/apk 都会把它判定为「比旧版新」的升级。
-PKG_RELEASE:=1904
+PKG_RELEASE:=1905
 
 PKG_CONFIG_DEPENDS:= \
 	CONFIG_PACKAGE_$(PKG_NAME)_Iptables_Transparent_Proxy \
