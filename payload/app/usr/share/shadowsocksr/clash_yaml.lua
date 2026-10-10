@@ -602,6 +602,154 @@ local function inject_custom_groups(doc)
 	return #added, empty
 end
 
+-- ---------------------------------------------------------------------------
+-- 域名嗅探：让订阅里的域名规则真的生效
+--
+-- ssr-plus 走的是 redir/tproxy（nat 重定向）：客户端先把域名解析成 IP，再把包
+-- 丢过来，所以 mihomo 拿到连接时目标**只有 IP，没有域名**。
+--
+-- 后果很严重：订阅里几千条 DOMAIN-SUFFIX 规则一条都匹配不上，整份规则表退化成
+-- 「GEOIP,CN 直连 + MATCH 兜底」两条。用户在面板上给某个组选了节点，也只对
+-- 「没被 GEOIP,CN 捞走」的域名有效 —— 比如某网盘域名解析到腾讯云海外 IP，先被
+-- GeoIP 判成国内直连，选香港美国全部白搭。
+--
+-- sniffer.parse-pure-ip 就是让 mihomo 对「纯 IP 连接」也去嗅探 TLS SNI / HTTP
+-- Host，把域名还原出来再匹配规则。默认 false，必须显式打开。
+-- ---------------------------------------------------------------------------
+
+local function enforce_sniffer(doc)
+	if type(doc.sniffer) ~= "table" then
+		doc.sniffer = {}
+	end
+	local sniffer = doc.sniffer
+	sniffer.enable = true
+	sniffer["parse-pure-ip"] = true
+	sniffer["force-dns-mapping"] = true
+	sniffer["override-destination"] = true
+
+	local sniff = type(sniffer.sniff) == "table" and sniffer.sniff or {}
+	sniffer.sniff = sniff
+
+	-- 订阅里常见把 HTTP 的端口也抄成 443，这里按协议纠正过来
+	local tls = type(sniff.TLS) == "table" and sniff.TLS or {}
+	tls.ports = { 443, 8443 }
+	tls["override-destination"] = true
+	sniff.TLS = tls
+
+	local http = type(sniff.HTTP) == "table" and sniff.HTTP or {}
+	http.ports = { 80, 8080 }
+	http["override-destination"] = true
+	sniff.HTTP = http
+
+	return true
+end
+
+-- ---------------------------------------------------------------------------
+-- 自定义分流规则
+--
+-- 订阅自带的规则是机场按自己的偏好切的，改不动。碰到「域名规则失效」「某个服务
+-- 被 GeoIP 误判成国内」这类事，需要一个自己能插规则的地方。
+--
+-- /etc/ssrplus/custom_rules.conf，一行一条 Clash 原生规则（# 注释、空行忽略），
+-- 原样插到 rules 的**最前面**，优先级压过订阅里的全部规则：
+--
+--   DOMAIN,access.mypikpak.com,Proxies
+--   DOMAIN-SUFFIX,mypikpak.com,Proxies
+--   DOMAIN-KEYWORD,dl-a10b-,DIRECT
+--   DOMAIN-SUFFIX,example.com,REJECT
+--
+-- 目标策略必须是真实存在的代理组/节点（或 DIRECT/REJECT/PASS 这类内置策略）：
+-- 指向不存在的组会让 mihomo 直接拒绝整份配置，所以校验不过的一律跳过。
+-- ---------------------------------------------------------------------------
+
+local CUSTOM_RULES_FILE = "/etc/ssrplus/custom_rules.conf"
+
+local BUILTIN_POLICIES = {
+	DIRECT = true, REJECT = true, ["REJECT-DROP"] = true,
+	PASS = true, ["PASS-RULE"] = true, GLOBAL = true, COMPATIBLE = true
+}
+
+-- 这两类的写法是 MATCH,<策略>，没有参数段
+local POLICY_AT_INDEX_2 = { MATCH = true, FINAL = true }
+
+local function read_custom_rule_lines()
+	local data = nixio.fs.readfile(CUSTOM_RULES_FILE)
+	if not data or data == "" then
+		return {}
+	end
+	local lines = {}
+	for line in tostring(data):gmatch("[^\r\n]+") do
+		local text = trim(line)
+		if text ~= "" and text:sub(1, 1) ~= "#" then
+			lines[#lines + 1] = text
+		end
+	end
+	return lines
+end
+
+-- 返回：插入条数、因目标策略不存在而跳过的条数
+local function inject_custom_rules(doc)
+	local lines = read_custom_rule_lines()
+	if #lines == 0 then
+		return 0, 0
+	end
+
+	local valid = {}
+	for name in pairs(BUILTIN_POLICIES) do
+		valid[name] = true
+	end
+	for _, proxy in ipairs(doc.proxies or {}) do
+		if type(proxy) == "table" and proxy.name and proxy.name ~= "" then
+			valid[tostring(proxy.name)] = true
+		end
+	end
+	for _, group in ipairs(doc["proxy-groups"] or {}) do
+		if type(group) == "table" and group.name and group.name ~= "" then
+			valid[tostring(group.name)] = true
+		end
+	end
+
+	local accepted = {}
+	local skipped = 0
+	for _, text in ipairs(lines) do
+		local fields = {}
+		for part in tostring(text):gmatch("[^,]+") do
+			fields[#fields + 1] = trim(part)
+		end
+
+		local rtype = tostring(fields[1] or ""):upper()
+		local policy = POLICY_AT_INDEX_2[rtype] and fields[2] or fields[3]
+		if rtype == "" or not policy or policy == "" or not valid[policy] then
+			skipped = skipped + 1
+		else
+			accepted[#accepted + 1] = text
+		end
+	end
+
+	if #accepted == 0 then
+		return 0, skipped
+	end
+
+	local injected = {}
+	for _, text in ipairs(accepted) do
+		injected[text] = true
+	end
+
+	local result = {}
+	for _, text in ipairs(accepted) do
+		result[#result + 1] = text
+	end
+	for _, rule in ipairs(doc.rules or {}) do
+		-- 和自定义规则逐字重复的，保留自定义那份（顺序上它已经在前面了）
+		if not injected[tostring(rule or "")] then
+			result[#result + 1] = rule
+		end
+	end
+	doc.rules = result
+
+	return #accepted, skipped
+end
+
 -- 把 group -> 影子组 的对应关系写成 TSV，供 init.d 在启动后调用 API 应用。
 -- 三列：<urlencoded 原组名> \t <urlencoded 影子组名> \t <影子组原名>
 local function write_autoselect_map(output_path, mapping)
@@ -665,8 +813,11 @@ local function prepare(input_path, output_path)
 	end
 
 	strip_runtime_conflicts(doc)
+	enforce_sniffer(doc)
 	local filled_groups = fill_empty_proxy_groups(doc)
 	local stripped_rules = strip_incompatible_script_rules(doc)
+	local custom_groups, custom_empty = inject_custom_groups(doc)
+	local custom_rules, custom_rules_skipped = inject_custom_rules(doc)
 	local ok, rendered = pcall(lyaml.dump, { doc })
 	if not ok or not rendered then
 		io.stderr:write("dump_failed\n")
@@ -674,7 +825,9 @@ local function prepare(input_path, output_path)
 	end
 
 	write_file(output_path, rendered)
-	io.stdout:write(string.format("filled_groups=%d stripped_script_rules=%d\n", filled_groups, stripped_rules))
+	io.stdout:write(string.format(
+		"filled_groups=%d stripped_script_rules=%d injected_custom=%d custom_empty=%d custom_rules=%d custom_rules_skipped=%d\n",
+		filled_groups, stripped_rules, custom_groups, custom_empty, custom_rules, custom_rules_skipped))
 	return true
 end
 
@@ -692,11 +845,15 @@ local function merge(raw_path, overlay_path, output_path)
 	end
 
 	strip_runtime_conflicts(raw_doc)
+	-- 在规则匹配之前：先保证域名能被嗅探出来，否则下面注入的域名规则一样是摆设
+	enforce_sniffer(raw_doc)
 	local filled_groups = fill_empty_proxy_groups(raw_doc)
 	local stripped_rules = strip_incompatible_script_rules(raw_doc)
 	local injected_groups, autoselect_mapping = inject_autoselect_groups(raw_doc)
 	-- 放在影子组之后：自定义组不该再被自动挂一层影子组
 	local custom_groups, custom_empty = inject_custom_groups(raw_doc)
+	-- 再往后：自定义规则允许指向自定义组，所以得等组都建好
+	local custom_rules, custom_rules_skipped = inject_custom_rules(raw_doc)
 	local merged = deep_merge(raw_doc, overlay_doc)
 	local ok, rendered = pcall(lyaml.dump, { merged })
 	if not ok or not rendered then
@@ -707,8 +864,9 @@ local function merge(raw_path, overlay_path, output_path)
 	write_file(output_path, rendered)
 	local injected_applied = write_autoselect_map(output_path, autoselect_mapping)
 	io.stdout:write(string.format(
-		"filled_groups=%d stripped_script_rules=%d injected_autoselect=%d injected_applied=%d injected_custom=%d custom_empty=%d\n",
-		filled_groups, stripped_rules, injected_groups, injected_applied, custom_groups, custom_empty))
+		"filled_groups=%d stripped_script_rules=%d injected_autoselect=%d injected_applied=%d injected_custom=%d custom_empty=%d custom_rules=%d custom_rules_skipped=%d\n",
+		filled_groups, stripped_rules, injected_groups, injected_applied, custom_groups, custom_empty,
+		custom_rules, custom_rules_skipped))
 	return true
 end
 

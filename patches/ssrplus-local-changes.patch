@@ -16,15 +16,16 @@ index 425251a..88f16b3 100644
  PKG_CONFIG_DEPENDS:= \
  	CONFIG_PACKAGE_$(PKG_NAME)_Iptables_Transparent_Proxy \
 diff --git a/luasrc/controller/shadowsocksr.lua b/luasrc/controller/shadowsocksr.lua
-index 1869b48..68e4928 100644
+index 1869b48..2084369 100644
 --- a/luasrc/controller/shadowsocksr.lua
 +++ b/luasrc/controller/shadowsocksr.lua
-@@ -17,6 +17,32 @@ local COMPONENT_HELPER = "/usr/share/shadowsocksr/update_components.sh"
+@@ -17,6 +17,33 @@ local COMPONENT_HELPER = "/usr/share/shadowsocksr/update_components.sh"
  local SERVER_DETECT_CACHE = "/tmp/ssrplus_server_detect.json"
  local SERVER_DETECT_LOCK = "/tmp/ssrplus_server_detect.lock"
  local CLASH_RULES_DIR = "/etc/ssrplus/clash"
 +local CLASH_WORKDIR_ROOT = "/var/etc/ssrplus/clash-"
 +local CUSTOM_GROUPS_FILE = "/etc/ssrplus/custom_groups.conf"
++local CUSTOM_RULES_FILE = "/etc/ssrplus/custom_rules.conf"
 +local CLASH_YAML_HELPER = "/usr/share/shadowsocksr/clash_yaml.lua"
 +
 +-- 不是真节点，面板里不该当成可选出口
@@ -52,7 +53,7 @@ index 1869b48..68e4928 100644
  local SUPPORTED_COMPONENTS = {
  	mainprogram = true,
  	xray = true,
-@@ -464,14 +490,23 @@ local function resolve_active_clash_sid(sid)
+@@ -464,14 +491,23 @@ local function resolve_active_clash_sid(sid)
  	return nil
  end
  
@@ -78,7 +79,7 @@ index 1869b48..68e4928 100644
  		luci.util.shellquote("Content-Type: application/json"),
  		luci.util.shellquote("Authorization: Bearer " .. secret),
  		method,
-@@ -516,6 +551,124 @@ local function parse_clash_groups(raw)
+@@ -516,6 +552,124 @@ local function parse_clash_groups(raw)
  	return groups
  end
  
@@ -203,7 +204,7 @@ index 1869b48..68e4928 100644
  local function parse_kv_output(raw)
  	local data = {}
  	for line in tostring(raw or ""):gmatch("[^\r\n]+") do
-@@ -679,9 +832,12 @@ function index()
+@@ -679,9 +833,14 @@ function index()
  	entry({"admin", "services", "shadowsocksr", "delete"}, call("act_delete"))
  	entry({"admin", "services", "shadowsocksr", "clash_panel"}, call("clash_panel")).leaf = true
  	entry({"admin", "services", "shadowsocksr", "clash_groups"}, call("clash_groups")).leaf = true
@@ -213,10 +214,12 @@ index 1869b48..68e4928 100644
  	entry({"admin", "services", "shadowsocksr", "clash_reset_defaults"}, call("clash_reset_defaults")).leaf = true
 +	entry({"admin", "services", "shadowsocksr", "clash_custom_groups"}, call("clash_custom_groups")).leaf = true
 +	entry({"admin", "services", "shadowsocksr", "clash_custom_group_save"}, call("clash_custom_group_save")).leaf = true
++	entry({"admin", "services", "shadowsocksr", "clash_custom_rules"}, call("clash_custom_rules")).leaf = true
++	entry({"admin", "services", "shadowsocksr", "clash_custom_rules_save"}, call("clash_custom_rules_save")).leaf = true
  	entry({"admin", "services", "shadowsocksr", "clash_client_policies"}, call("clash_client_policies")).leaf = true
  	entry({"admin", "services", "shadowsocksr", "clash_client_rule_save"}, call("clash_client_rule_save")).leaf = true
  	entry({"admin", "services", "shadowsocksr", "clash_client_rule_clear"}, call("clash_client_rule_clear")).leaf = true
-@@ -1101,19 +1257,83 @@ end
+@@ -1101,19 +1260,83 @@ end
  function clash_groups()
  	local sid = luci.http.formvalue("sid")
  	local groups = {}
@@ -304,7 +307,7 @@ index 1869b48..68e4928 100644
  	})
  end
  
-@@ -1192,6 +1412,183 @@ function clash_reset_defaults()
+@@ -1192,6 +1415,287 @@ function clash_reset_defaults()
  	})
  end
  
@@ -481,6 +484,110 @@ index 1869b48..68e4928 100644
 +	luci.http.write_json({
 +		success = ok,
 +		restarted = restarted,
++		code = ret and ret.code or nil
++	})
++end
++
++-- ---------------------------------------------------------------------------
++-- 自定义域名规则
++--
++-- 定义存在 /etc/ssrplus/custom_rules.conf，一行一条 Clash 原生规则：
++--   DOMAIN-SUFFIX,mypikpak.com,HK
++--   DOMAIN-KEYWORD,dl-a10b-,DIRECT
++-- 由 clash_yaml.lua 的 inject_custom_rules() 插到 rules 最前面。
++-- 这里只负责读写文件 + 重新生成运行时配置 + 热重载。
++-- ---------------------------------------------------------------------------
++
++-- 规则的目标必须是已经存在的策略：列真实代理组名给面板做提示，
++-- DIRECT/REJECT 这类内置策略单独补上。
++function clash_custom_rules()
++	local sid = luci.http.formvalue("sid")
++	local active_sid = resolve_active_clash_sid(sid)
++	local policies = {}
++
++	if active_sid then
++		local proxies = clash_proxy_map(active_sid)
++		if proxies then
++			for name, proxy in pairs(proxies) do
++				if type(proxy) == "table" and type(proxy.all) == "table" and #proxy.all > 0 then
++					policies[#policies + 1] = name
++				end
++			end
++		end
++	end
++	for _, name in ipairs({ "DIRECT", "REJECT" }) do
++		policies[#policies + 1] = name
++	end
++	table.sort(policies)
++
++	luci.http.prepare_content("application/json")
++	luci.http.write_json({
++		active = active_sid ~= nil,
++		sid = active_sid,
++		policies = policies,
++		rules = nixio.fs.readfile(CUSTOM_RULES_FILE) or ""
++	})
++end
++
++function clash_custom_rules_save()
++	local sid = luci.http.formvalue("sid")
++	local active_sid = resolve_active_clash_sid(sid)
++	if not active_sid then
++		luci.http.status(409, "Conflict")
++		luci.http.prepare_content("application/json")
++		luci.http.write_json({ success = false, message = "inactive" })
++		return
++	end
++
++	-- 只做最基本的规整：去掉 CR 与首尾空白行，注释原样留着（面板上还能看懂）
++	local text = tostring(luci.http.formvalue("rules") or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
++	text = text:gsub("^%s*\n", ""):gsub("\n%s*$", "")
++	if text:sub(-1) ~= "\n" then
++		text = text .. "\n"
++	end
++	if text == "\n" then
++		text = ""
++	end
++	nixio.fs.writefile(CUSTOM_RULES_FILE, text)
++
++	local workdir = CLASH_WORKDIR_ROOT .. active_sid
++	local runtime = workdir .. "/config.yaml"
++	local helper = string.format("/usr/bin/lua %s", luci.util.shellquote(CLASH_YAML_HELPER))
++
++	-- 用 exec 而不是 call：要把 merge 打印的 custom_rules/skipped 统计拿回来告诉面板
++	local stats = luci.sys.exec(string.format("%s merge %s %s %s 2>/dev/null",
++		helper,
++		luci.util.shellquote(workdir .. "/raw.yaml"),
++		luci.util.shellquote(workdir .. "/overlay.yaml"),
++		luci.util.shellquote(runtime)))
++	if not stats or stats == "" then
++		luci.http.prepare_content("application/json")
++		luci.http.write_json({ success = false, message = "regen_failed" })
++		return
++	end
++
++	luci.sys.call(string.format("%s append_client_policy_rules %s %s >/dev/null 2>&1",
++		helper, luci.util.shellquote(runtime), luci.util.shellquote(active_sid)))
++
++	local injected = tonumber(string.match(stats, "custom_rules=(%d+)"))
++	local skipped = tonumber(string.match(stats, "custom_rules_skipped=(%d+)"))
++
++	-- 热重载：mihomo 原生接口，不重启进程、不重播连接
++	local body = string.format('{"path":"%s"}', runtime)
++	local ret = clash_api_request(active_sid, "PUT", "/configs?force=true", body, 20)
++	local ok = ret ~= nil and ret.code ~= nil and ret.code >= 200 and ret.code < 300
++	local restarted = false
++	if not ok then
++		luci.sys.call("/etc/init.d/shadowsocksr restart >/dev/null 2>&1 &")
++		restarted = true
++	end
++
++	luci.http.prepare_content("application/json")
++	luci.http.write_json({
++		success = ok or restarted,
++		restarted = restarted,
++		injected = injected,
++		skipped = skipped,
 +		code = ret and ret.code or nil
 +	})
 +end
@@ -2051,10 +2158,10 @@ index 0000000..59de39d
 +})();
 +</script>
 diff --git a/luasrc/view/shadowsocksr/clash_main_panel.htm b/luasrc/view/shadowsocksr/clash_main_panel.htm
-index 9a0f845..6b2c461 100644
+index 9a0f845..a7ff4f7 100644
 --- a/luasrc/view/shadowsocksr/clash_main_panel.htm
 +++ b/luasrc/view/shadowsocksr/clash_main_panel.htm
-@@ -4,1124 +4,1093 @@ local clash_nodes = self.clash_nodes or {}
+@@ -4,1124 +4,1297 @@ local clash_nodes = self.clash_nodes or {}
  local current_sid = self.map:get(section, "global_server") or "nil"
  -%>
  <div id="ssr-clash-main-panel-wrap">
@@ -2069,18 +2176,6 @@ index 9a0f845..6b2c461 100644
 -			--ssr-clash-field-bg: #ffffff;
 -			--ssr-clash-field-fg: #333333;
 -			--ssr-clash-field-border: #d0d0d0;
--		}
--
--		html[data-darkmode="true"] #ssr-clash-main-panel-wrap {
--			--ssr-clash-modal-bg: #121212;
--			--ssr-clash-modal-fg: #f5f5f5;
--			--ssr-clash-modal-muted: #b7b7b7;
--			--ssr-clash-modal-border: rgba(255, 255, 255, 0.08);
--			--ssr-clash-modal-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
--			--ssr-clash-mask-bg: rgba(0, 0, 0, 0.62);
--			--ssr-clash-field-bg: #1f1f1f;
--			--ssr-clash-field-fg: #f3f3f3;
--			--ssr-clash-field-border: #3a3a3a;
 -		}
 +	<div id="ssr-clash-main-buttons">
 +		<input
@@ -2106,12 +2201,16 @@ index 9a0f845..6b2c461 100644
 +			data-sid="<%=current_sid%>" />
 +	</div>
  
--		#ssr-clash-modal-mask {
--			display: none;
--			position: fixed;
--			inset: 0;
--			background: var(--ssr-clash-mask-bg);
--			z-index: 2000;
+-		html[data-darkmode="true"] #ssr-clash-main-panel-wrap {
+-			--ssr-clash-modal-bg: #121212;
+-			--ssr-clash-modal-fg: #f5f5f5;
+-			--ssr-clash-modal-muted: #b7b7b7;
+-			--ssr-clash-modal-border: rgba(255, 255, 255, 0.08);
+-			--ssr-clash-modal-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+-			--ssr-clash-mask-bg: rgba(0, 0, 0, 0.62);
+-			--ssr-clash-field-bg: #1f1f1f;
+-			--ssr-clash-field-fg: #f3f3f3;
+-			--ssr-clash-field-border: #3a3a3a;
 -		}
 +	<div id="ssr-clash-modal-mask"></div>
 +	<div id="ssr-clash-modal" class="ssr-clash-ui" role="dialog" aria-modal="true" aria-labelledby="ssr-clash-modal-title">
@@ -2127,6 +2226,7 @@ index 9a0f845..6b2c461 100644
 +				<input type="button" id="ssr-clash-rules-export" class="btn cbi-button" value="<%:Export Client Rules%>" style="display:none" />
 +				<input type="button" id="ssr-clash-rules-clear" class="btn cbi-button" value="<%:Clear All Rules%>" style="display:none" />
 +				<input type="button" id="ssr-clash-rules-save" class="btn cbi-button cbi-button-apply" value="<%:Save%>" style="display:none" />
++				<input type="button" id="ssr-clash-domain-rules-save" class="btn cbi-button cbi-button-apply" value="<%:Save%>" style="display:none" />
 +				<input type="button" id="ssr-clash-modal-close" class="btn cbi-button" value="<%:Close%>" />
 +			</div>
 +		</div>
@@ -2139,6 +2239,10 @@ index 9a0f845..6b2c461 100644
 +				<button type="button" class="scui-nav-item" data-mode="rules">
 +					<span class="scui-nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="13" height="9" rx="2"/><path d="M18 8h3.5"/><path d="M2.5 17.5h13"/><path d="M18 15.5h3.5"/></svg></span>
 +					<span class="scui-nav-text"><%:Client Rules%></span>
++				</button>
++				<button type="button" class="scui-nav-item" data-mode="domainrules">
++					<span class="scui-nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h7"/><path d="m17 15 2 2 3.5-3.5"/></svg></span>
++					<span class="scui-nav-text"><%:Custom Domain Rules%></span>
 +				</button>
 +				<button type="button" class="scui-nav-item" data-mode="components">
 +					<span class="scui-nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M8 10.5 12 14.5 16 10.5"/><path d="M4.5 16.5v2A2.5 2.5 0 0 0 7 21h10a2.5 2.5 0 0 0 2.5-2.5v-2"/></svg></span>
@@ -2169,6 +2273,21 @@ index 9a0f845..6b2c461 100644
 +					</div>
 +				</div>
 +
++				<div class="scui-pane" id="ssr-clash-pane-domainrules" style="display:none">
++					<div class="ssr-domain-rules">
++						<div class="scui-rules-note">
++							<%:One Clash rule per line, injected before every rule from the subscription. Format: TYPE,ARGUMENT,POLICY — the policy must be an existing proxy group (or DIRECT / REJECT).%>
++							<br />
++							<%:Example%>: <code>DOMAIN-SUFFIX,mypikpak.com,HK</code> &nbsp; <code>DOMAIN-KEYWORD,dl-a10b-,DIRECT</code>
++						</div>
++						<textarea id="ssr-clash-domain-rules-input" spellcheck="false" rows="14" placeholder="DOMAIN-SUFFIX,example.com,HK&#10;DOMAIN-KEYWORD,ads-,REJECT"></textarea>
++						<div class="ssr-domain-rules-tools">
++							<input type="button" id="ssr-clash-domain-rules-template" class="btn cbi-button" value="<%:Insert PikPak Template%>" />
++							<span id="ssr-clash-domain-rules-hint" class="ssr-domain-rules-hint"></span>
++						</div>
++					</div>
++				</div>
++
 +				<div class="scui-pane" id="ssr-clash-pane-components" style="display:none">
 +					<script type="text/javascript">window.ssrComponentLazy = true;</script>
 +					<%+shadowsocksr/component%>
@@ -2177,6 +2296,15 @@ index 9a0f845..6b2c461 100644
 +		</div>
 +	</div>
 +</div>
+ 
+-		#ssr-clash-modal-mask {
+-			display: none;
+-			position: fixed;
+-			inset: 0;
+-			background: var(--ssr-clash-mask-bg);
+-			z-index: 2000;
+-		}
++<%+shadowsocksr/clash_groups_ui%>
  
 -		#ssr-clash-modal {
 -			display: none;
@@ -2196,7 +2324,9 @@ index 9a0f845..6b2c461 100644
 -			z-index: 2001;
 -			padding: 12px 16px 14px;
 -		}
-+<%+shadowsocksr/clash_groups_ui%>
++<style type="text/css">
++	#ssr-clash-main-panel-wrap { --ssr-clash-mask-bg: rgba(15, 20, 34, 0.42); }
++	html[data-darkmode="true"] #ssr-clash-main-panel-wrap { --ssr-clash-mask-bg: rgba(0, 0, 0, 0.66); }
  
 -		#ssr-clash-modal-header {
 -			display: flex;
@@ -2204,16 +2334,6 @@ index 9a0f845..6b2c461 100644
 -			justify-content: space-between;
 -			gap: 12px;
 -			margin-bottom: 10px;
--		}
-+<style type="text/css">
-+	#ssr-clash-main-panel-wrap { --ssr-clash-mask-bg: rgba(15, 20, 34, 0.42); }
-+	html[data-darkmode="true"] #ssr-clash-main-panel-wrap { --ssr-clash-mask-bg: rgba(0, 0, 0, 0.66); }
- 
--		#ssr-clash-modal-heading {
--			display: flex;
--			align-items: center;
--			gap: 12px;
--			min-width: 0;
 -		}
 +	#ssr-clash-modal-mask {
 +		display: none;
@@ -2224,11 +2344,11 @@ index 9a0f845..6b2c461 100644
 +		z-index: 2000;
 +	}
  
--		#ssr-clash-modal-title {
--			font-size: 17px;
--			font-weight: 600;
--			color: var(--ssr-clash-modal-fg);
--			white-space: nowrap;
+-		#ssr-clash-modal-heading {
+-			display: flex;
+-			align-items: center;
+-			gap: 12px;
+-			min-width: 0;
 -		}
 +	#ssr-clash-modal {
 +		display: none;
@@ -2251,14 +2371,11 @@ index 9a0f845..6b2c461 100644
 +		box-shadow: 0 36px 90px -28px rgba(0, 0, 0, 0.9), 0 2px 10px rgba(0, 0, 0, 0.5);
 +	}
  
--		#ssr-clash-modal-actions {
--			display: flex;
--			align-items: center;
--			justify-content: center;
--			gap: 8px;
--			flex-wrap: wrap;
--			margin: 0;
--			flex: 1 1 auto;
+-		#ssr-clash-modal-title {
+-			font-size: 17px;
+-			font-weight: 600;
+-			color: var(--ssr-clash-modal-fg);
+-			white-space: nowrap;
 +	@media (max-width: 900px) {
 +		#ssr-clash-modal {
 +			top: 8px;
@@ -2272,8 +2389,14 @@ index 9a0f845..6b2c461 100644
 +		#ssr-clash-modal .scui-modal-body { padding: 10px 12px 14px; }
 +	}
  
--		#ssr-clash-modal-header #ssr-clash-rules-add {
--			margin-left: 8px;
+-		#ssr-clash-modal-actions {
+-			display: flex;
+-			align-items: center;
+-			justify-content: center;
+-			gap: 8px;
+-			flex-wrap: wrap;
+-			margin: 0;
+-			flex: 1 1 auto;
 -		}
 +	/* ------------------------------------------------------- 左侧页签导航 */
 +	#ssr-clash-modal .scui-modal-body.scui-has-nav {
@@ -2282,11 +2405,8 @@ index 9a0f845..6b2c461 100644
 +		gap: 16px;
 +	}
  
--		#ssr-clash-modal-status {
--			margin: 0;
--			color: var(--ssr-clash-modal-muted);
--			font-size: 14px;
--			white-space: nowrap;
+-		#ssr-clash-modal-header #ssr-clash-rules-add {
+-			margin-left: 8px;
 -		}
 +	#ssr-clash-modal .scui-nav {
 +		flex: 0 0 168px;
@@ -2297,8 +2417,11 @@ index 9a0f845..6b2c461 100644
 +		top: 0;
 +	}
  
--		#ssr-clash-modal-groups .cbi-value-title {
+-		#ssr-clash-modal-status {
+-			margin: 0;
 -			color: var(--ssr-clash-modal-muted);
+-			font-size: 14px;
+-			white-space: nowrap;
 -		}
 +	#ssr-clash-modal .scui-nav-item {
 +		display: flex;
@@ -2328,8 +2451,8 @@ index 9a0f845..6b2c461 100644
 +		font-weight: 600;
 +	}
  
--		#ssr-clash-client-rules {
--			display: none;
+-		#ssr-clash-modal-groups .cbi-value-title {
+-			color: var(--ssr-clash-modal-muted);
 -		}
 +	#ssr-clash-modal .scui-nav-ico {
 +		display: inline-flex;
@@ -2399,6 +2522,44 @@ index 9a0f845..6b2c461 100644
 +		background: var(--scui-accent);
 +		border-color: var(--scui-accent);
 +		color: #fff;
++	}
+ 
+-		#ssr-clash-client-rules {
+-			display: none;
+-		}
++	/* 自定义域名规则页签 */
++	#ssr-clash-pane-domainrules .ssr-domain-rules { display: flex; flex-direction: column; gap: 10px; }
++	#ssr-clash-pane-domainrules textarea {
++		width: 100%;
++		box-sizing: border-box;
++		min-height: 280px;
++		padding: 10px 12px;
++		border: 1px solid var(--scui-border, #d4d9e2);
++		border-radius: 8px;
++		background: var(--scui-panel-bg, #fff);
++		color: inherit;
++		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
++		font-size: 12.5px;
++		line-height: 1.6;
++		resize: vertical;
++		tab-size: 2;
++	}
++	#ssr-clash-pane-domainrules code {
++		padding: 1px 5px;
++		border-radius: 4px;
++		background: rgba(127, 127, 127, 0.14);
++		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
++	}
++	#ssr-clash-pane-domainrules .ssr-domain-rules-tools {
++		display: flex;
++		align-items: center;
++		gap: 10px;
++		flex-wrap: wrap;
++	}
++	#ssr-clash-pane-domainrules .ssr-domain-rules-hint {
++		font-size: 12px;
++		opacity: 0.72;
++		word-break: break-all;
 +	}
  
 -		#ssr-clash-client-rules table {
@@ -2600,10 +2761,11 @@ index 9a0f845..6b2c461 100644
 +		<% end -%>
 +	};
 +
-+	// 三个页签：代理组 / 客户端规则 / 组件更新
++	// 四个页签：代理组 / 客户端规则 / 自定义规则 / 组件更新
 +	var PANES = {
 +		groups: 'ssr-clash-pane-groups',
 +		rules: 'ssr-clash-pane-rules',
++		domainrules: 'ssr-clash-pane-domainrules',
 +		components: 'ssr-clash-pane-components'
 +	};
 +
@@ -2615,10 +2777,17 @@ index 9a0f845..6b2c461 100644
 +		'ssr-clash-rules-import'
 +	];
 +
++	var DOMAIN_RULES_BUTTONS = [
++		'ssr-clash-domain-rules-save'
++	];
++
++	var ALL_MODE_BUTTONS = RULES_BUTTONS.concat(DOMAIN_RULES_BUTTONS);
++
 +	// 每个页签在标题栏显示哪些按钮（代理组 / 组件更新各自带操作条）
 +	var MODE_BUTTONS = {
 +		groups: [],
 +		rules: RULES_BUTTONS,
++		domainrules: DOMAIN_RULES_BUTTONS,
 +		components: []
 +	};
 +
@@ -2678,7 +2847,7 @@ index 9a0f845..6b2c461 100644
 -			color: var(--ssr-clash-field-fg);
 -		}
 +		var active = MODE_BUTTONS[mode] || [];
-+		RULES_BUTTONS.forEach(function(id) { show(id, active.indexOf(id) >= 0); });
++		ALL_MODE_BUTTONS.forEach(function(id) { show(id, active.indexOf(id) >= 0); });
  
 -		html[data-darkmode="true"] #ssr-clash-modal .btn.cbi-button {
 -			background: #262626 !important;
@@ -2786,6 +2955,9 @@ index 9a0f845..6b2c461 100644
 +		},
 +		rules: function() {
 +			openClientRulesPanel(currentPanelSid);
++		},
++		domainrules: function() {
++			openDomainRulesPanel(currentPanelSid);
 +		},
 +		components: function() {
 +			initComponents();
@@ -3231,13 +3403,12 @@ index 9a0f845..6b2c461 100644
 -			}
 -			return rows;
 -		}
- 
+-
 -		function renderClientRuleRows() {
 -			var body = document.getElementById('ssr-clash-client-rules-body');
 -			if (!body) {
 -				return;
-+				suggest.classList.add('is-open');
- 			}
+-			}
  
 -			body.innerHTML = '';
 -			if (!clientRules.length) {
@@ -3249,12 +3420,8 @@ index 9a0f845..6b2c461 100644
 -				row.appendChild(cell);
 -				body.appendChild(row);
 -				return;
--			}
-+			var remarksCell = document.createElement('td');
-+			var remarkInput = document.createElement('input');
-+			remarkInput.type = 'text';
-+			remarkInput.className = 'cbi-input-text';
-+			remarkInput.value = rule.remarks || '';
++				suggest.classList.add('is-open');
+ 			}
  
 -			clientRules.forEach(function(rule, index) {
 -				var row = document.createElement('tr');
@@ -3300,7 +3467,12 @@ index 9a0f845..6b2c461 100644
 -						suggest.classList.remove('is-open');
 -						return;
 -					}
--
++			var remarksCell = document.createElement('td');
++			var remarkInput = document.createElement('input');
++			remarkInput.type = 'text';
++			remarkInput.className = 'cbi-input-text';
++			remarkInput.value = rule.remarks || '';
+ 
 -					matchedClients.forEach(function(client) {
 -						var item = document.createElement('div');
 -						item.className = 'ssr-client-suggest-item';
@@ -3531,7 +3703,15 @@ index 9a0f845..6b2c461 100644
 -					}
 -					select.appendChild(option);
 -				});
--
++			clientPolicies = normalizeList(result.policies);
++			lanClients = normalizeList(result.clients);
++			clientRules = normalizeList(result.rules);
++			renderClientRuleRows();
++			setPanelStatus('<%:Ready.%>', 'ok');
++		});
++		return false;
++	}
+ 
 -				select.onchange = function() {
 -					setPanelStatus('<%:Switching...%>', '#0072c3');
 -						window.ssrXHR.get('<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_switch")%>', {
@@ -3547,25 +3727,26 @@ index 9a0f845..6b2c461 100644
 -						}
 -					});
 -				};
-+			clientPolicies = normalizeList(result.policies);
-+			lanClients = normalizeList(result.clients);
-+			clientRules = normalizeList(result.rules);
-+			renderClientRuleRows();
-+			setPanelStatus('<%:Ready.%>', 'ok');
-+		});
-+		return false;
-+	}
++	// ------------------------------------------------------------ 自定义域名规则
  
 -				field.appendChild(select);
 -				wrapper.appendChild(label);
 -				wrapper.appendChild(field);
 -				groupsEl.appendChild(wrapper);
 -			});
-+	function loadGroups(sid) {
-+		if (sid) {
-+			currentPanelSid = sid;
++	var domainRulesPolicies = [];
++
++	function domainRulesInput() {
++		return $('ssr-clash-domain-rules-input');
++	}
++
++	function setDomainRulesHint(text) {
++		var el = $('ssr-clash-domain-rules-hint');
++		if (el) {
++			el.textContent = text || '';
  		}
--
++	}
+ 
 -		function addClientRule() {
 -			var firstClient = lanClients[0] || { ip: '', mac: '', name: '' };
 -			var firstPolicy = clientPolicies[0] || { name: '', label: '' };
@@ -3577,18 +3758,73 @@ index 9a0f845..6b2c461 100644
 -				policy_group: firstPolicy.name || ''
 -			});
 -			renderClientRuleRows();
--			return false;
-+		if (clashUI) {
-+			clashUI.setSid(currentPanelSid);
-+			clashUI.load();
++	// 模板里的目标组必须真实存在，否则整条规则会被丢掉。
++	// 优先挑地区组，其次任意代理组，都没有就只能交给用户手改。
++	function pickDefaultPolicy() {
++		var preferred = ['HK', 'Proxies', 'Final'];
++		var i;
++		for (i = 0; i < preferred.length; i++) {
++			if (domainRulesPolicies.indexOf(preferred[i]) >= 0) {
++				return preferred[i];
++			}
++		}
++		for (i = 0; i < domainRulesPolicies.length; i++) {
++			var name = domainRulesPolicies[i];
++			if (name === 'DIRECT' || name === 'REJECT' || name.indexOf('♻️') === 0) {
++				continue;
++			}
++			return name;
++		}
++		return 'DIRECT';
++	}
++
++	function buildPikpakTemplate() {
++		var group = pickDefaultPolicy();
++		return [
++			'# ===== PikPak 网盘 =====',
++			'# 下载 CDN：没被墙也不限制地区，直连能跑满带宽、不烧机场流量',
++			'# （顺序重要：这两条必须排在下面的 DOMAIN-SUFFIX 前面）',
++			'DOMAIN-KEYWORD,dl-a10b-,DIRECT',
++			'DOMAIN-KEYWORD,dl-z01a-,DIRECT',
++			'# 主站 / API / 地区检测：PikPak 主动屏蔽大陆 IP，必须显式走代理',
++			'DOMAIN-SUFFIX,mypikpak.com,' + group,
++			'DOMAIN-SUFFIX,mypikpak.net,' + group,
++			'DOMAIN-SUFFIX,pikpak.me,' + group,
++			'DOMAIN-SUFFIX,pikpakdrive.com,' + group
++		].join('\n');
++	}
++
++	function insertPikpakTemplate() {
++		var box = domainRulesInput();
++		if (!box) {
+ 			return false;
  		}
++		if (box.value.indexOf('mypikpak.com') >= 0) {
++			setPanelStatus('<%:The PikPak template is already present.%>', 'warn');
++			return false;
++		}
++		var head = box.value.replace(/\s+$/, '');
++		box.value = head + (head === '' ? '' : '\n\n') + buildPikpakTemplate() + '\n';
++		setDomainRulesHint('<%:Template inserted. Click Save to apply.%>');
++		return false;
 +	}
  
 -		function saveClientRules(btn) {
 -			if (!currentEditorSid) {
 -				return false;
--			}
--
++	function openDomainRulesPanel(sid) {
++		currentEditorSid = sid;
++		setPanelStatus('<%:Loading...%>', 'busy');
++
++		window.ssrXHR.get('<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_custom_rules")%>', {
++			sid: sid
++		}, function(x, result) {
++			if (!result || !result.active) {
++				setPanelStatus('<%:This Clash total node is not active. Apply this node first.%>', 'warn');
++				setDomainRulesHint('');
++				return;
+ 			}
+ 
 -			var original = btn.value;
 -			btn.disabled = true;
 -			btn.value = '<%:Saving...%>';
@@ -3596,9 +3832,11 @@ index 9a0f845..6b2c461 100644
 -				sid: currentEditorSid,
 -				count: String(clientRules.length)
 -			};
-+	window.ssrClashAddClientRule = function() {
-+		return addClientRule();
-+	};
++			domainRulesPolicies = normalizeList(result.policies);
++			var box = domainRulesInput();
++			if (box) {
++				box.value = result.rules || '';
++			}
  
 -			clientRules.forEach(function(rule, idx) {
 -				var index = idx + 1;
@@ -3608,9 +3846,17 @@ index 9a0f845..6b2c461 100644
 -				payload['rule_' + index + '_remarks'] = rule.remarks || '';
 -				payload['rule_' + index + '_policy_group'] = rule.policy_group || '';
 -			});
-+	window.ssrClashSaveClientRules = function(btn) {
-+		return saveClientRules(btn);
-+	};
++			if (domainRulesPolicies.length === 0) {
++				setDomainRulesHint('');
++			} else {
++				var shown = domainRulesPolicies.slice(0, 14);
++				setDomainRulesHint('<%:Available targets%>: ' + shown.join(' / ') +
++					(domainRulesPolicies.length > shown.length ? ' …' : ''));
++			}
++			setPanelStatus('<%:Ready.%>', 'ok');
++		});
++		return false;
++	}
  
 -			window.ssrXHR.post('<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_client_rule_save")%>', payload, function(x, result) {
 -				btn.disabled = false;
@@ -3623,11 +3869,10 @@ index 9a0f845..6b2c461 100644
 -					setPanelStatus('<%:Failed to save custom client proxy rules.%>', '#ff0000');
 -				}
 -			});
--			return false;
--		}
-+	window.ssrClashOpenClientRulesPanel = function(sid) {
-+		return openPanel(sid, 'rules');
-+	};
++	function saveDomainRules(btn) {
++		if (!currentEditorSid) {
+ 			return false;
+ 		}
  
 -		function openClientRulesPanel(sid) {
 -			currentEditorSid = sid;
@@ -3659,8 +3904,29 @@ index 9a0f845..6b2c461 100644
 -					clientRules = [];
 -					renderClientRuleRows();
 -					return;
--				}
-+	// ------------------------------------------------------------ 弹窗控制
++		var box = domainRulesInput();
++		var original = btn.value;
++		btn.disabled = true;
++		btn.value = '<%:Saving...%>';
++
++		window.ssrXHR.post('<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_custom_rules_save")%>', {
++			sid: currentEditorSid,
++			rules: box ? box.value : ''
++		}, function(x, result) {
++			btn.disabled = false;
++			btn.value = original;
++			if (result && result.success) {
++				var detail = '';
++				if (typeof result.injected === 'number') {
++					detail = ' (<%:applied%>=' + result.injected + ', <%:skipped%>=' + (result.skipped || 0) + ')';
+ 				}
++				setPanelStatus('<%:Custom domain rules saved.%>' + detail, 'ok');
++			} else {
++				setPanelStatus('<%:Failed to save custom domain rules.%>', 'err');
++			}
++		});
++		return false;
++	}
  
 -				clientPolicies = normalizeList(result.policies);
 -				lanClients = normalizeList(result.clients);
@@ -3668,26 +3934,39 @@ index 9a0f845..6b2c461 100644
 -				renderClientRuleRows();
 -				setPanelStatus('<%:Ready.%>', '#249400');
 -			});
-+	function openPanel(sid, mode) {
-+		var modal = $('ssr-clash-modal');
-+		var mask = $('ssr-clash-modal-mask');
-+		if (!modal || !mask) {
- 			return false;
+-			return false;
++	function loadGroups(sid) {
++		if (sid) {
++			currentPanelSid = sid;
++		}
++		if (clashUI) {
++			clashUI.setSid(currentPanelSid);
++			clashUI.load();
  		}
++	}
  
 -		window.ssrClashAddClientRule = function() {
 -			return addClientRule();
 -		};
--
++	window.ssrClashAddClientRule = function() {
++		return addClientRule();
++	};
+ 
 -		window.ssrClashSaveClientRules = function(btn) {
 -			return saveClientRules(btn);
 -		};
--
++	window.ssrClashSaveClientRules = function(btn) {
++		return saveClientRules(btn);
++	};
+ 
 -		window.ssrClashOpenClientRulesPanel = function(sid) {
 -			openPanel(sid);
 -			return openClientRulesPanel(sid);
 -		};
--
++	window.ssrClashOpenClientRulesPanel = function(sid) {
++		return openPanel(sid, 'rules');
++	};
+ 
 -		function loadGroups(sid) {
 -			setPanelStatus('<%:Loading...%>', '#666');
 -			var groupsEl = document.getElementById('ssr-clash-modal-groups');
@@ -3719,19 +3998,17 @@ index 9a0f845..6b2c461 100644
 -					}
 -					return;
 -				}
--
++	// ------------------------------------------------------------ 弹窗控制
+ 
 -				setPanelStatus('<%:Ready.%>', '#249400');
 -				renderGroups(result.groups || []);
 -			});
-+		if (sid) {
-+			currentPanelSid = sid;
++	function openPanel(sid, mode) {
++		var modal = $('ssr-clash-modal');
++		var mask = $('ssr-clash-modal-mask');
++		if (!modal || !mask) {
++			return false;
  		}
-+		mask.style.display = 'block';
-+		modal.style.display = 'block';
-+		modal.scrollTop = 0;
-+		activateMode(mode || 'groups');
-+		return false;
-+	}
  
 -		function openPanel(sid) {
 -			var modal = document.getElementById('ssr-clash-modal');
@@ -3741,10 +4018,23 @@ index 9a0f845..6b2c461 100644
 -				return false;
 -			}
 -
--			currentPanelSid = sid;
++		if (sid) {
+ 			currentPanelSid = sid;
 -			if (title) {
 -				title.textContent = '<%:Clash Panel%>';
 -			}
++		}
++		mask.style.display = 'block';
++		modal.style.display = 'block';
++		modal.scrollTop = 0;
++		activateMode(mode || 'groups');
++		return false;
++	}
+ 
+-			mask.style.display = 'block';
+-			modal.style.display = 'block';
+-			loadGroups(sid);
+-			return false;
 +	function closePanel() {
 +		var modal = $('ssr-clash-modal');
 +		var mask = $('ssr-clash-modal-mask');
@@ -3753,13 +4043,19 @@ index 9a0f845..6b2c461 100644
 +		}
 +		if (mask) {
 +			mask.style.display = 'none';
-+		}
+ 		}
 +		return false;
 +	}
  
--			mask.style.display = 'block';
--			modal.style.display = 'block';
--			loadGroups(sid);
+-		function closePanel() {
+-			var modal = document.getElementById('ssr-clash-modal');
+-			var mask = document.getElementById('ssr-clash-modal-mask');
+-			if (modal) {
+-				modal.style.display = 'none';
+-			}
+-			if (mask) {
+-				mask.style.display = 'none';
+-			}
 -			return false;
 +	function updateClashPanelMain() {
 +		var select = document.querySelector('select[name$=".global_server"]');
@@ -3773,16 +4069,17 @@ index 9a0f845..6b2c461 100644
 +			return;
  		}
  
--		function closePanel() {
--			var modal = document.getElementById('ssr-clash-modal');
--			var mask = document.getElementById('ssr-clash-modal-mask');
--			if (modal) {
--				modal.style.display = 'none';
+-		function updateClashPanelMain() {
+-			var select = document.querySelector('select[name$=".global_server"]');
+-			var wrap = document.getElementById('ssr-clash-main-panel-wrap');
+-			var row = wrap ? wrap.closest('.cbi-value') : null;
+-			var customRulesBtn = document.getElementById('ssr-clash-main-client-rules');
+-			var resetBtn = document.getElementById('ssr-clash-main-reset-defaults');
+-			var panelBtn = document.getElementById('ssr-clash-main-open');
+-			var btnContainer = document.getElementById('ssr-clash-main-buttons');
+-			if (!select || !row || !customRulesBtn || !resetBtn || !panelBtn) {
+-				return;
 -			}
--			if (mask) {
--				mask.style.display = 'none';
--			}
--			return false;
 +		var sid = select.value;
 +		if (sid && clashNodes[sid]) {
 +			row.style.display = '';
@@ -3796,35 +4093,8 @@ index 9a0f845..6b2c461 100644
 +			resetBtn.setAttribute('data-sid', '');
 +			panelBtn.setAttribute('data-sid', '');
 +			if (btnContainer) btnContainer.style.display = 'none';
- 		}
-+	}
- 
--		function updateClashPanelMain() {
--			var select = document.querySelector('select[name$=".global_server"]');
--			var wrap = document.getElementById('ssr-clash-main-panel-wrap');
--			var row = wrap ? wrap.closest('.cbi-value') : null;
--			var customRulesBtn = document.getElementById('ssr-clash-main-client-rules');
--			var resetBtn = document.getElementById('ssr-clash-main-reset-defaults');
--			var panelBtn = document.getElementById('ssr-clash-main-open');
--			var btnContainer = document.getElementById('ssr-clash-main-buttons');
--			if (!select || !row || !customRulesBtn || !resetBtn || !panelBtn) {
--				return;
--			}
-+	function bindEvents() {
-+		var select = document.querySelector('select[name$=".global_server"]');
-+		var customRulesBtn = $('ssr-clash-main-client-rules');
-+		var resetBtn = $('ssr-clash-main-reset-defaults');
-+		var panelBtn = $('ssr-clash-main-open');
-+		var modalCloseBtn = $('ssr-clash-modal-close');
-+		var modalMask = $('ssr-clash-modal-mask');
-+		var wrap = $('ssr-clash-main-panel-wrap');
-+		var row = wrap ? wrap.closest('.cbi-value') : null;
-+		var btnContainer = $('ssr-clash-main-buttons');
-+
-+		if (row && !clashNodes['<%=current_sid%>']) {
-+			row.style.display = 'none';
-+			if (btnContainer) btnContainer.style.display = 'none';
 +		}
++	}
  
 -			var sid = select.value;
 -			if (sid && clashNodes[sid]) {
@@ -3840,8 +4110,20 @@ index 9a0f845..6b2c461 100644
 -				panelBtn.setAttribute('data-sid', '');
 -				if (btnContainer) btnContainer.style.display = 'none';
 -			}
-+		if (select) {
-+			select.addEventListener('change', updateClashPanelMain);
++	function bindEvents() {
++		var select = document.querySelector('select[name$=".global_server"]');
++		var customRulesBtn = $('ssr-clash-main-client-rules');
++		var resetBtn = $('ssr-clash-main-reset-defaults');
++		var panelBtn = $('ssr-clash-main-open');
++		var modalCloseBtn = $('ssr-clash-modal-close');
++		var modalMask = $('ssr-clash-modal-mask');
++		var wrap = $('ssr-clash-main-panel-wrap');
++		var row = wrap ? wrap.closest('.cbi-value') : null;
++		var btnContainer = $('ssr-clash-main-buttons');
++
++		if (row && !clashNodes['<%=current_sid%>']) {
++			row.style.display = 'none';
++			if (btnContainer) btnContainer.style.display = 'none';
  		}
  
 -		window.setTimeout(function() {
@@ -3862,22 +4144,18 @@ index 9a0f845..6b2c461 100644
 -				row.style.display = 'none';
 -				if (btnContainer) btnContainer.style.display = 'none';
 -			}
-+		if (customRulesBtn) {
-+			customRulesBtn.onclick = function() {
-+				var sid = this.getAttribute('data-sid');
-+				if (!sid) return false;
-+				return window.ssrClashOpenClientRulesPanel(sid);
-+			};
++		if (select) {
++			select.addEventListener('change', updateClashPanelMain);
 +		}
  
 -			if (select) {
 -				select.addEventListener('change', updateClashPanelMain);
 -			}
-+		if (resetBtn) {
-+			resetBtn.onclick = function() {
++		if (customRulesBtn) {
++			customRulesBtn.onclick = function() {
 +				var sid = this.getAttribute('data-sid');
 +				if (!sid) return false;
-+				return ssrClashResetDefaults(this, sid);
++				return window.ssrClashOpenClientRulesPanel(sid);
 +			};
 +		}
  
@@ -3888,11 +4166,11 @@ index 9a0f845..6b2c461 100644
 -					return window.ssrClashOpenClientRulesPanel(sid);
 -				};
 -			}
-+		if (panelBtn) {
-+			panelBtn.onclick = function() {
++		if (resetBtn) {
++			resetBtn.onclick = function() {
 +				var sid = this.getAttribute('data-sid');
 +				if (!sid) return false;
-+				return openPanel(sid);
++				return ssrClashResetDefaults(this, sid);
 +			};
 +		}
  
@@ -3901,6 +4179,21 @@ index 9a0f845..6b2c461 100644
 -					var sid = this.getAttribute('data-sid');
 -					if (!sid) return false;
 -					return ssrClashResetDefaults(this, sid);
+-				};
+-			}
++		if (panelBtn) {
++			panelBtn.onclick = function() {
++				var sid = this.getAttribute('data-sid');
++				if (!sid) return false;
++				return openPanel(sid);
++			};
++		}
+ 
+-			if (panelBtn) {
+-				panelBtn.onclick = function() {
+-					var sid = this.getAttribute('data-sid');
+-					if (!sid) return false;
+-					return openPanel(sid);
 -				};
 -			}
 +		var exportBtn = $('ssr-clash-rules-export');
@@ -3912,11 +4205,11 @@ index 9a0f845..6b2c461 100644
 +			};
 +		}
  
--			if (panelBtn) {
--				panelBtn.onclick = function() {
--					var sid = this.getAttribute('data-sid');
--					if (!sid) return false;
--					return openPanel(sid);
+-			if (modalRefreshBtn) {
+-				modalRefreshBtn.onclick = function() {
+-					if (!currentPanelSid) return false;
+-					loadGroups(currentPanelSid);
+-					return false;
 -				};
 -			}
 +		var importBtn = $('ssr-clash-rules-import');
@@ -3930,10 +4223,11 @@ index 9a0f845..6b2c461 100644
 +			};
 +		}
  
--			if (modalRefreshBtn) {
--				modalRefreshBtn.onclick = function() {
--					if (!currentPanelSid) return false;
--					loadGroups(currentPanelSid);
+-			var modalRulesExportBtn = document.getElementById('ssr-clash-rules-export');
+-			if (modalRulesExportBtn) {
+-				modalRulesExportBtn.onclick = function() {
+-					downloadClientRulesCsv();
+-					setPanelStatus('<%:Client rules exported to CSV file.%>', '#249400');
 -					return false;
 +		if (importFile) {
 +			importFile.onchange = function() {
@@ -3951,11 +4245,13 @@ index 9a0f845..6b2c461 100644
 +			};
 +		}
  
--			var modalRulesExportBtn = document.getElementById('ssr-clash-rules-export');
--			if (modalRulesExportBtn) {
--				modalRulesExportBtn.onclick = function() {
--					downloadClientRulesCsv();
--					setPanelStatus('<%:Client rules exported to CSV file.%>', '#249400');
+-			var modalRulesImportBtn = document.getElementById('ssr-clash-rules-import');
+-			var modalRulesImportFile = document.getElementById('ssr-clash-rules-import-file');
+-			if (modalRulesImportBtn) {
+-				modalRulesImportBtn.onclick = function() {
+-					if (modalRulesImportFile) {
+-						modalRulesImportFile.click();
+-					}
 +		var clearBtn = $('ssr-clash-rules-clear');
 +		if (clearBtn) {
 +			clearBtn.onclick = function() {
@@ -3964,12 +4260,13 @@ index 9a0f845..6b2c461 100644
 -				};
 -			}
 -
--			var modalRulesImportBtn = document.getElementById('ssr-clash-rules-import');
--			var modalRulesImportFile = document.getElementById('ssr-clash-rules-import-file');
--			if (modalRulesImportBtn) {
--				modalRulesImportBtn.onclick = function() {
--					if (modalRulesImportFile) {
--						modalRulesImportFile.click();
+-			if (modalRulesImportFile) {
+-				modalRulesImportFile.onchange = function() {
+-					var file = modalRulesImportFile.files && modalRulesImportFile.files[0];
+-					if (!file) return;
+-					var reader = new FileReader();
+-					reader.onload = function() {
+-						clientRules = parseClientRulesCsv(reader.result || '');
 +				}
 +				clearBtn.disabled = true;
 +				window.ssrXHR.post('<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_client_rule_clear")%>', {
@@ -3978,43 +4275,23 @@ index 9a0f845..6b2c461 100644
 +					clearBtn.disabled = false;
 +					if (result && result.success) {
 +						clientRules = [];
-+						renderClientRuleRows();
-+						setPanelStatus(result.reapplied ? '<%:All client proxy rules cleared and applied.%>' : '<%:All client proxy rules cleared.%>', 'ok');
-+					} else {
-+						setPanelStatus('<%:Failed to clear all client proxy rules.%>', 'err');
- 					}
--					return false;
--				};
--			}
-+				});
-+				return false;
-+			};
-+		}
- 
--			if (modalRulesImportFile) {
--				modalRulesImportFile.onchange = function() {
--					var file = modalRulesImportFile.files && modalRulesImportFile.files[0];
--					if (!file) return;
--					var reader = new FileReader();
--					reader.onload = function() {
--						clientRules = parseClientRulesCsv(reader.result || '');
--						renderClientRuleRows();
+ 						renderClientRuleRows();
 -						setPanelStatus('<%:Client rules imported from CSV file. Click Save to apply.%>', '#249400');
 -						modalRulesImportFile.value = '';
 -					};
 -					reader.readAsText(file);
 -				};
 -			}
-+		if (modalCloseBtn) {
-+			modalCloseBtn.onclick = closePanel;
-+		}
- 
+-
 -			var modalRulesClearBtn = document.getElementById('ssr-clash-rules-clear');
 -			if (modalRulesClearBtn) {
 -				modalRulesClearBtn.onclick = function() {
 -					if (!window.confirm('<%:Clear all custom client proxy rules and restore empty state?%>')) {
 -						return false;
--					}
++						setPanelStatus(result.reapplied ? '<%:All client proxy rules cleared and applied.%>' : '<%:All client proxy rules cleared.%>', 'ok');
++					} else {
++						setPanelStatus('<%:Failed to clear all client proxy rules.%>', 'err');
+ 					}
 -					modalRulesClearBtn.disabled = true;
 -					window.ssrXHR.post('<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_client_rule_clear")%>', {
 -						sid: currentEditorSid
@@ -4031,43 +4308,37 @@ index 9a0f845..6b2c461 100644
 -					return false;
 -				};
 -			}
-+		var nav = $('ssr-clash-nav');
-+		if (nav) {
-+			nav.addEventListener('click', function(ev) {
-+				var item = navItemOf(ev.target);
-+				if (!item) {
-+					return;
-+				}
-+				var mode = item.getAttribute('data-mode');
-+				if (mode) {
-+					activateMode(mode);
-+				}
-+			});
++				});
++				return false;
++			};
 +		}
  
 -			if (modalCloseBtn) {
 -				modalCloseBtn.onclick = closePanel;
 -			}
-+		if (modalMask) {
-+			modalMask.onclick = closePanel;
++		var domainTemplateBtn = $('ssr-clash-domain-rules-template');
++		if (domainTemplateBtn) {
++			domainTemplateBtn.onclick = insertPikpakTemplate;
 +		}
  
 -			if (modalMask) {
 -				modalMask.onclick = closePanel;
-+		document.addEventListener('keydown', function(ev) {
-+			if (ev.key === 'Escape') {
-+				var modal = $('ssr-clash-modal');
-+				if (modal && modal.style.display === 'block') {
-+					closePanel();
-+				}
- 			}
-+		});
+-			}
++		var domainSaveBtn = $('ssr-clash-domain-rules-save');
++		if (domainSaveBtn) {
++			domainSaveBtn.onclick = function() {
++				return saveDomainRules(this);
++			};
++		}
  
 -			updateClashPanelMain();
 -		}, 0);
 -	})();
 -	</script>
--
++		if (modalCloseBtn) {
++			modalCloseBtn.onclick = closePanel;
++		}
+ 
 -	<div id="ssr-clash-main-buttons">
 -		<input
 -			type="button"
@@ -4091,8 +4362,19 @@ index 9a0f845..6b2c461 100644
 -			title="<%:Mihomo Pannel%>"
 -			data-sid="<%=current_sid%>" />
 -	</div>
-+		updateClashPanelMain();
-+	}
++		var nav = $('ssr-clash-nav');
++		if (nav) {
++			nav.addEventListener('click', function(ev) {
++				var item = navItemOf(ev.target);
++				if (!item) {
++					return;
++				}
++				var mode = item.getAttribute('data-mode');
++				if (mode) {
++					activateMode(mode);
++				}
++			});
++		}
  
 -	<div id="ssr-clash-modal-mask"></div>
 -	<div id="ssr-clash-modal" role="dialog" aria-modal="true" aria-labelledby="ssr-clash-modal-title">
@@ -4129,6 +4411,22 @@ index 9a0f845..6b2c461 100644
 -		<div id="ssr-clash-modal-groups"></div>
 -	</div>
 -</div>
++		if (modalMask) {
++			modalMask.onclick = closePanel;
++		}
++
++		document.addEventListener('keydown', function(ev) {
++			if (ev.key === 'Escape') {
++				var modal = $('ssr-clash-modal');
++				if (modal && modal.style.display === 'block') {
++					closePanel();
++				}
++			}
++		});
++
++		updateClashPanelMain();
++	}
++
 +	if (document.readyState === 'loading') {
 +		document.addEventListener('DOMContentLoaded', bindEvents);
 +	} else {
@@ -4535,7 +4833,7 @@ index baaf4cd..c6a0bb4 100644
  
  #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:10
 diff --git a/po/zh_Hans/ssr-plus.po b/po/zh_Hans/ssr-plus.po
-index 831ac7f..16faa43 100644
+index 831ac7f..2c828c4 100644
 --- a/po/zh_Hans/ssr-plus.po
 +++ b/po/zh_Hans/ssr-plus.po
 @@ -10,6 +10,14 @@ msgstr ""
@@ -4924,8 +5222,80 @@ index 831ac7f..16faa43 100644
  msgid "Idle session check interval (seconds)"
  msgstr "空闲会话检查间隔（秒）"
  
+@@ -3885,3 +4175,71 @@ msgstr "国内 IPv6 地址库更新地址"
+ 
+ msgid "China IPv6 Data"
+ msgstr "国内 IPv6 地址库"
++
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm
++msgid "Custom Domain Rules"
++msgstr "自定义分流规则"
++
++msgid "One Clash rule per line, injected before every rule from the subscription. Format: TYPE,ARGUMENT,POLICY — the policy must be an existing proxy group (or DIRECT / REJECT)."
++msgstr "一行一条 Clash 规则，插在订阅全部规则的最前面。格式：规则类型,参数,目标 —— 目标必须是已存在的代理组（或 DIRECT / REJECT）。"
++
++msgid "Example"
++msgstr "例如"
++
++msgid "Available targets"
++msgstr "可用目标组"
++
++msgid "Insert PikPak Template"
++msgstr "插入 PikPak 模板"
++
++msgid "The PikPak template is already present."
++msgstr "规则里已经有 PikPak 模板了"
++
++msgid "Template inserted. Click Save to apply."
++msgstr "模板已插入，点「保存」生效"
++
++msgid "Custom domain rules saved."
++msgstr "自定义分流规则已保存"
++
++msgid "Failed to save custom domain rules."
++msgstr "自定义分流规则保存失败"
++
++msgid "applied"
++msgstr "生效"
++
++msgid "skipped"
++msgstr "跳过"
++
++#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm
++msgid "Custom Domain Rules"
++msgstr "自定义分流规则"
++
++msgid "One Clash rule per line, injected before every rule from the subscription. Format: TYPE,ARGUMENT,POLICY — the policy must be an existing proxy group (or DIRECT / REJECT)."
++msgstr "一行一条 Clash 规则，插在订阅全部规则的最前面。格式：规则类型,参数,目标 —— 目标必须是已存在的代理组（或 DIRECT / REJECT）。"
++
++msgid "Example"
++msgstr "例如"
++
++msgid "Available targets"
++msgstr "可用目标组"
++
++msgid "Insert PikPak Template"
++msgstr "插入 PikPak 模板"
++
++msgid "The PikPak template is already present."
++msgstr "规则里已经有 PikPak 模板了"
++
++msgid "Template inserted. Click Save to apply."
++msgstr "模板已插入，点「保存」生效"
++
++msgid "Custom domain rules saved."
++msgstr "自定义分流规则已保存"
++
++msgid "Failed to save custom domain rules."
++msgstr "自定义分流规则保存失败"
++
++msgid "applied"
++msgstr "生效"
++
++msgid "skipped"
++msgstr "跳过"
 diff --git a/root/etc/init.d/shadowsocksr b/root/etc/init.d/shadowsocksr
-index 8ee8755..d2725e4 100755
+index 8ee8755..7edd7e7 100755
 --- a/root/etc/init.d/shadowsocksr
 +++ b/root/etc/init.d/shadowsocksr
 @@ -593,6 +593,7 @@ clash_cache() {
@@ -4936,13 +5306,29 @@ index 8ee8755..d2725e4 100755
  }
  
  filter_clash_yaml_proxies() {
-@@ -622,6 +623,47 @@ filter_clash_yaml_proxies() {
+@@ -622,6 +623,63 @@ filter_clash_yaml_proxies() {
  	rm -f "$names_file" "$removed_file"
  }
  
 +_collect_clash_sid() {
 +	local sid="$1"
-+	[ "$(uci_get_by_name "$sid" type)" = "clash" ] && _orphan_keep_sids="$_orphan_keep_sids $sid"
++	local cpath cbase
++
++	[ "$(uci_get_by_name "$sid" type)" = "clash" ] || return 0
++	_orphan_keep_sids="$_orphan_keep_sids $sid"
++
++	# 节点用「本地上传的 YAML」时，clash_path 指向 $CLASH_CONFIG_DIR/<文件md5>.yaml，
++	# 文件名不是 sid。只按 sid 判断会把这个源文件当垃圾删掉，
++	# 结果是服务下次启动报「未配置订阅 URL/本地配置」起不来 —— 一并保下来。
++	cpath="$(uci_get_by_name "$sid" clash_path)"
++	case "$cpath" in
++		"$CLASH_CONFIG_DIR"/*.yaml)
++			cbase="${cpath##*/}"
++			_orphan_keep_sids="$_orphan_keep_sids ${cbase%.yaml}"
++			;;
++	esac
++
++	return 0
 +}
 +
 +# 订阅换过地址、节点删掉之后，旧缓存会一直留在 flash 上。
@@ -4984,7 +5370,7 @@ index 8ee8755..d2725e4 100755
  prepare_clash_runtime_config() {
  	local sid="$1"
  	local local_port="$2"
-@@ -635,6 +677,9 @@ prepare_clash_runtime_config() {
+@@ -635,6 +693,9 @@ prepare_clash_runtime_config() {
  	local merge_stats
  	local filled_groups
  	local stripped_script_rules
@@ -4994,7 +5380,7 @@ index 8ee8755..d2725e4 100755
  	local clash_secret
  	local dns_ipv4_only
  	local dns_mode
-@@ -650,6 +695,8 @@ prepare_clash_runtime_config() {
+@@ -650,6 +711,8 @@ prepare_clash_runtime_config() {
  	merge_stats=""
  	filled_groups=0
  	stripped_script_rules=0
@@ -5003,7 +5389,7 @@ index 8ee8755..d2725e4 100755
  	clash_secret="$(get_clash_api_secret "$sid")"
  	dns_ipv4_only="$(get_filter_aaaa)"
  	dns_mode="$(uci_get_by_type global pdnsd_enable 0)"
-@@ -671,6 +718,7 @@ prepare_clash_runtime_config() {
+@@ -671,6 +734,7 @@ prepare_clash_runtime_config() {
  		bind-address: "$(ipv6_enabled && echo '*' || echo '0.0.0.0')"
  		ipv6: $(ipv6_enabled && echo true || echo false)
  		routing-mark: $CLASH_OUTBOUND_MARK
@@ -5011,7 +5397,7 @@ index 8ee8755..d2725e4 100755
  		profile:
  		  store-selected: true
  		tun:
-@@ -709,12 +757,26 @@ prepare_clash_runtime_config() {
+@@ -709,12 +773,26 @@ prepare_clash_runtime_config() {
  	stripped_script_rules="$(printf '%s\n' "$merge_stats" | sed -n 's/.*stripped_script_rules=\([0-9][0-9]*\).*/\1/p' | tail -n1)"
  	[ -n "$filled_groups" ] || filled_groups=0
  	[ -n "$stripped_script_rules" ] || stripped_script_rules=0
@@ -5038,7 +5424,7 @@ index 8ee8755..d2725e4 100755
  
  	client_policy_stats="$(/usr/bin/lua "$CLASH_YAML_HELPER" append_client_policy_rules "$runtime_file" "$sid" 2>/dev/null)" || true
  	client_rules="$(printf '%s\n' "$client_policy_stats" | sed -n 's/.*client_rules=\([0-9][0-9]*\).*/\1/p' | tail -n1)"
-@@ -739,6 +801,71 @@ prepare_clash_runtime_config() {
+@@ -739,6 +817,71 @@ prepare_clash_runtime_config() {
  	link_mihomo_geodata "$workdir"
  }
  
@@ -5110,7 +5496,7 @@ index 8ee8755..d2725e4 100755
  resolve_global_clash_socks_port() {
  	local socks_enabled
  	local socks_server
-@@ -1011,9 +1138,12 @@ start_v2ray_with_mihomo() {
+@@ -1011,9 +1154,12 @@ start_v2ray_with_mihomo() {
  	workdir="$(get_v2ray_mihomo_workdir "$instance_key")"
  	protocol_name="$(uci_get_by_name "$sid" v2ray_protocol)"
  	[ -n "$protocol_name" ] || protocol_name="$(uci_get_by_name "$sid" type)"
@@ -5126,7 +5512,7 @@ index 8ee8755..d2725e4 100755
  }
  
  start_socks5_udp_with_ipt2socks() {
-@@ -1103,7 +1233,46 @@ ln_start_bin() {
+@@ -1103,7 +1249,46 @@ ln_start_bin() {
  		_exit 2
  	}
  	ulimit -n 1000000
@@ -5174,7 +5560,7 @@ index 8ee8755..d2725e4 100755
  }
  
  check_run_environment() {
-@@ -2487,8 +2656,13 @@ Start_Run() {
+@@ -2487,8 +2672,13 @@ Start_Run() {
  			return 1
  		}
  		clash_workdir="$(get_clash_workdir "$GLOBAL_SERVER")"
@@ -5191,10 +5577,10 @@ index 8ee8755..d2725e4 100755
  	socks5)
  		if start_socks5_redir_with_ipt2socks "$GLOBAL_SERVER" "$tcp_port" "$threads"; then
 diff --git a/root/usr/share/shadowsocksr/clash_yaml.lua b/root/usr/share/shadowsocksr/clash_yaml.lua
-index beda6d7..d3fd97f 100644
+index beda6d7..7c6dba7 100644
 --- a/root/usr/share/shadowsocksr/clash_yaml.lua
 +++ b/root/usr/share/shadowsocksr/clash_yaml.lua
-@@ -253,6 +253,378 @@ local function fill_empty_proxy_groups(doc)
+@@ -253,6 +253,526 @@ local function fill_empty_proxy_groups(doc)
  	return changed
  end
  
@@ -5547,6 +5933,154 @@ index beda6d7..d3fd97f 100644
 +	return #added, empty
 +end
 +
++-- ---------------------------------------------------------------------------
++-- 域名嗅探：让订阅里的域名规则真的生效
++--
++-- ssr-plus 走的是 redir/tproxy（nat 重定向）：客户端先把域名解析成 IP，再把包
++-- 丢过来，所以 mihomo 拿到连接时目标**只有 IP，没有域名**。
++--
++-- 后果很严重：订阅里几千条 DOMAIN-SUFFIX 规则一条都匹配不上，整份规则表退化成
++-- 「GEOIP,CN 直连 + MATCH 兜底」两条。用户在面板上给某个组选了节点，也只对
++-- 「没被 GEOIP,CN 捞走」的域名有效 —— 比如某网盘域名解析到腾讯云海外 IP，先被
++-- GeoIP 判成国内直连，选香港美国全部白搭。
++--
++-- sniffer.parse-pure-ip 就是让 mihomo 对「纯 IP 连接」也去嗅探 TLS SNI / HTTP
++-- Host，把域名还原出来再匹配规则。默认 false，必须显式打开。
++-- ---------------------------------------------------------------------------
++
++local function enforce_sniffer(doc)
++	if type(doc.sniffer) ~= "table" then
++		doc.sniffer = {}
++	end
++	local sniffer = doc.sniffer
++	sniffer.enable = true
++	sniffer["parse-pure-ip"] = true
++	sniffer["force-dns-mapping"] = true
++	sniffer["override-destination"] = true
++
++	local sniff = type(sniffer.sniff) == "table" and sniffer.sniff or {}
++	sniffer.sniff = sniff
++
++	-- 订阅里常见把 HTTP 的端口也抄成 443，这里按协议纠正过来
++	local tls = type(sniff.TLS) == "table" and sniff.TLS or {}
++	tls.ports = { 443, 8443 }
++	tls["override-destination"] = true
++	sniff.TLS = tls
++
++	local http = type(sniff.HTTP) == "table" and sniff.HTTP or {}
++	http.ports = { 80, 8080 }
++	http["override-destination"] = true
++	sniff.HTTP = http
++
++	return true
++end
++
++-- ---------------------------------------------------------------------------
++-- 自定义分流规则
++--
++-- 订阅自带的规则是机场按自己的偏好切的，改不动。碰到「域名规则失效」「某个服务
++-- 被 GeoIP 误判成国内」这类事，需要一个自己能插规则的地方。
++--
++-- /etc/ssrplus/custom_rules.conf，一行一条 Clash 原生规则（# 注释、空行忽略），
++-- 原样插到 rules 的**最前面**，优先级压过订阅里的全部规则：
++--
++--   DOMAIN,access.mypikpak.com,Proxies
++--   DOMAIN-SUFFIX,mypikpak.com,Proxies
++--   DOMAIN-KEYWORD,dl-a10b-,DIRECT
++--   DOMAIN-SUFFIX,example.com,REJECT
++--
++-- 目标策略必须是真实存在的代理组/节点（或 DIRECT/REJECT/PASS 这类内置策略）：
++-- 指向不存在的组会让 mihomo 直接拒绝整份配置，所以校验不过的一律跳过。
++-- ---------------------------------------------------------------------------
++
++local CUSTOM_RULES_FILE = "/etc/ssrplus/custom_rules.conf"
++
++local BUILTIN_POLICIES = {
++	DIRECT = true, REJECT = true, ["REJECT-DROP"] = true,
++	PASS = true, ["PASS-RULE"] = true, GLOBAL = true, COMPATIBLE = true
++}
++
++-- 这两类的写法是 MATCH,<策略>，没有参数段
++local POLICY_AT_INDEX_2 = { MATCH = true, FINAL = true }
++
++local function read_custom_rule_lines()
++	local data = nixio.fs.readfile(CUSTOM_RULES_FILE)
++	if not data or data == "" then
++		return {}
++	end
++	local lines = {}
++	for line in tostring(data):gmatch("[^\r\n]+") do
++		local text = trim(line)
++		if text ~= "" and text:sub(1, 1) ~= "#" then
++			lines[#lines + 1] = text
++		end
++	end
++	return lines
++end
++
++-- 返回：插入条数、因目标策略不存在而跳过的条数
++local function inject_custom_rules(doc)
++	local lines = read_custom_rule_lines()
++	if #lines == 0 then
++		return 0, 0
++	end
++
++	local valid = {}
++	for name in pairs(BUILTIN_POLICIES) do
++		valid[name] = true
++	end
++	for _, proxy in ipairs(doc.proxies or {}) do
++		if type(proxy) == "table" and proxy.name and proxy.name ~= "" then
++			valid[tostring(proxy.name)] = true
++		end
++	end
++	for _, group in ipairs(doc["proxy-groups"] or {}) do
++		if type(group) == "table" and group.name and group.name ~= "" then
++			valid[tostring(group.name)] = true
++		end
++	end
++
++	local accepted = {}
++	local skipped = 0
++	for _, text in ipairs(lines) do
++		local fields = {}
++		for part in tostring(text):gmatch("[^,]+") do
++			fields[#fields + 1] = trim(part)
++		end
++
++		local rtype = tostring(fields[1] or ""):upper()
++		local policy = POLICY_AT_INDEX_2[rtype] and fields[2] or fields[3]
++		if rtype == "" or not policy or policy == "" or not valid[policy] then
++			skipped = skipped + 1
++		else
++			accepted[#accepted + 1] = text
++		end
++	end
++
++	if #accepted == 0 then
++		return 0, skipped
++	end
++
++	local injected = {}
++	for _, text in ipairs(accepted) do
++		injected[text] = true
++	end
++
++	local result = {}
++	for _, text in ipairs(accepted) do
++		result[#result + 1] = text
++	end
++	for _, rule in ipairs(doc.rules or {}) do
++		-- 和自定义规则逐字重复的，保留自定义那份（顺序上它已经在前面了）
++		if not injected[tostring(rule or "")] then
++			result[#result + 1] = rule
++		end
++	end
++	doc.rules = result
++
++	return #accepted, skipped
++end
++
 +-- 把 group -> 影子组 的对应关系写成 TSV，供 init.d 在启动后调用 API 应用。
 +-- 三列：<urlencoded 原组名> \t <urlencoded 影子组名> \t <影子组原名>
 +local function write_autoselect_map(output_path, mapping)
@@ -5573,25 +6107,55 @@ index beda6d7..d3fd97f 100644
  local function strip_incompatible_script_rules(doc)
  	local kept = {}
  	local removed = 0
-@@ -322,6 +694,9 @@ local function merge(raw_path, overlay_path, output_path)
+@@ -293,8 +813,11 @@ local function prepare(input_path, output_path)
+ 	end
+ 
+ 	strip_runtime_conflicts(doc)
++	enforce_sniffer(doc)
+ 	local filled_groups = fill_empty_proxy_groups(doc)
+ 	local stripped_rules = strip_incompatible_script_rules(doc)
++	local custom_groups, custom_empty = inject_custom_groups(doc)
++	local custom_rules, custom_rules_skipped = inject_custom_rules(doc)
+ 	local ok, rendered = pcall(lyaml.dump, { doc })
+ 	if not ok or not rendered then
+ 		io.stderr:write("dump_failed\n")
+@@ -302,7 +825,9 @@ local function prepare(input_path, output_path)
+ 	end
+ 
+ 	write_file(output_path, rendered)
+-	io.stdout:write(string.format("filled_groups=%d stripped_script_rules=%d\n", filled_groups, stripped_rules))
++	io.stdout:write(string.format(
++		"filled_groups=%d stripped_script_rules=%d injected_custom=%d custom_empty=%d custom_rules=%d custom_rules_skipped=%d\n",
++		filled_groups, stripped_rules, custom_groups, custom_empty, custom_rules, custom_rules_skipped))
+ 	return true
+ end
+ 
+@@ -320,8 +845,15 @@ local function merge(raw_path, overlay_path, output_path)
+ 	end
+ 
  	strip_runtime_conflicts(raw_doc)
++	-- 在规则匹配之前：先保证域名能被嗅探出来，否则下面注入的域名规则一样是摆设
++	enforce_sniffer(raw_doc)
  	local filled_groups = fill_empty_proxy_groups(raw_doc)
  	local stripped_rules = strip_incompatible_script_rules(raw_doc)
 +	local injected_groups, autoselect_mapping = inject_autoselect_groups(raw_doc)
 +	-- 放在影子组之后：自定义组不该再被自动挂一层影子组
 +	local custom_groups, custom_empty = inject_custom_groups(raw_doc)
++	-- 再往后：自定义规则允许指向自定义组，所以得等组都建好
++	local custom_rules, custom_rules_skipped = inject_custom_rules(raw_doc)
  	local merged = deep_merge(raw_doc, overlay_doc)
  	local ok, rendered = pcall(lyaml.dump, { merged })
  	if not ok or not rendered then
-@@ -330,7 +705,10 @@ local function merge(raw_path, overlay_path, output_path)
+@@ -330,7 +862,11 @@ local function merge(raw_path, overlay_path, output_path)
  	end
  
  	write_file(output_path, rendered)
 -	io.stdout:write(string.format("filled_groups=%d stripped_script_rules=%d\n", filled_groups, stripped_rules))
 +	local injected_applied = write_autoselect_map(output_path, autoselect_mapping)
 +	io.stdout:write(string.format(
-+		"filled_groups=%d stripped_script_rules=%d injected_autoselect=%d injected_applied=%d injected_custom=%d custom_empty=%d\n",
-+		filled_groups, stripped_rules, injected_groups, injected_applied, custom_groups, custom_empty))
++		"filled_groups=%d stripped_script_rules=%d injected_autoselect=%d injected_applied=%d injected_custom=%d custom_empty=%d custom_rules=%d custom_rules_skipped=%d\n",
++		filled_groups, stripped_rules, injected_groups, injected_applied, custom_groups, custom_empty,
++		custom_rules, custom_rules_skipped))
  	return true
  end
  

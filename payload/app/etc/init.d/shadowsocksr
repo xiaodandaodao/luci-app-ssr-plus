@@ -625,7 +625,23 @@ filter_clash_yaml_proxies() {
 
 _collect_clash_sid() {
 	local sid="$1"
-	[ "$(uci_get_by_name "$sid" type)" = "clash" ] && _orphan_keep_sids="$_orphan_keep_sids $sid"
+	local cpath cbase
+
+	[ "$(uci_get_by_name "$sid" type)" = "clash" ] || return 0
+	_orphan_keep_sids="$_orphan_keep_sids $sid"
+
+	# 节点用「本地上传的 YAML」时，clash_path 指向 $CLASH_CONFIG_DIR/<文件md5>.yaml，
+	# 文件名不是 sid。只按 sid 判断会把这个源文件当垃圾删掉，
+	# 结果是服务下次启动报「未配置订阅 URL/本地配置」起不来 —— 一并保下来。
+	cpath="$(uci_get_by_name "$sid" clash_path)"
+	case "$cpath" in
+		"$CLASH_CONFIG_DIR"/*.yaml)
+			cbase="${cpath##*/}"
+			_orphan_keep_sids="$_orphan_keep_sids ${cbase%.yaml}"
+			;;
+	esac
+
+	return 0
 }
 
 # 订阅换过地址、节点删掉之后，旧缓存会一直留在 flash 上。

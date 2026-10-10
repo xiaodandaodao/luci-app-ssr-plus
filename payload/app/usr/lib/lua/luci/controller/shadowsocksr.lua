@@ -19,6 +19,7 @@ local SERVER_DETECT_LOCK = "/tmp/ssrplus_server_detect.lock"
 local CLASH_RULES_DIR = "/etc/ssrplus/clash"
 local CLASH_WORKDIR_ROOT = "/var/etc/ssrplus/clash-"
 local CUSTOM_GROUPS_FILE = "/etc/ssrplus/custom_groups.conf"
+local CUSTOM_RULES_FILE = "/etc/ssrplus/custom_rules.conf"
 local CLASH_YAML_HELPER = "/usr/share/shadowsocksr/clash_yaml.lua"
 
 -- 不是真节点，面板里不该当成可选出口
@@ -838,6 +839,8 @@ function index()
 	entry({"admin", "services", "shadowsocksr", "clash_reset_defaults"}, call("clash_reset_defaults")).leaf = true
 	entry({"admin", "services", "shadowsocksr", "clash_custom_groups"}, call("clash_custom_groups")).leaf = true
 	entry({"admin", "services", "shadowsocksr", "clash_custom_group_save"}, call("clash_custom_group_save")).leaf = true
+	entry({"admin", "services", "shadowsocksr", "clash_custom_rules"}, call("clash_custom_rules")).leaf = true
+	entry({"admin", "services", "shadowsocksr", "clash_custom_rules_save"}, call("clash_custom_rules_save")).leaf = true
 	entry({"admin", "services", "shadowsocksr", "clash_client_policies"}, call("clash_client_policies")).leaf = true
 	entry({"admin", "services", "shadowsocksr", "clash_client_rule_save"}, call("clash_client_rule_save")).leaf = true
 	entry({"admin", "services", "shadowsocksr", "clash_client_rule_clear"}, call("clash_client_rule_clear")).leaf = true
@@ -1585,6 +1588,110 @@ function clash_custom_group_save()
 	luci.http.write_json({
 		success = ok,
 		restarted = restarted,
+		code = ret and ret.code or nil
+	})
+end
+
+-- ---------------------------------------------------------------------------
+-- 自定义域名规则
+--
+-- 定义存在 /etc/ssrplus/custom_rules.conf，一行一条 Clash 原生规则：
+--   DOMAIN-SUFFIX,mypikpak.com,HK
+--   DOMAIN-KEYWORD,dl-a10b-,DIRECT
+-- 由 clash_yaml.lua 的 inject_custom_rules() 插到 rules 最前面。
+-- 这里只负责读写文件 + 重新生成运行时配置 + 热重载。
+-- ---------------------------------------------------------------------------
+
+-- 规则的目标必须是已经存在的策略：列真实代理组名给面板做提示，
+-- DIRECT/REJECT 这类内置策略单独补上。
+function clash_custom_rules()
+	local sid = luci.http.formvalue("sid")
+	local active_sid = resolve_active_clash_sid(sid)
+	local policies = {}
+
+	if active_sid then
+		local proxies = clash_proxy_map(active_sid)
+		if proxies then
+			for name, proxy in pairs(proxies) do
+				if type(proxy) == "table" and type(proxy.all) == "table" and #proxy.all > 0 then
+					policies[#policies + 1] = name
+				end
+			end
+		end
+	end
+	for _, name in ipairs({ "DIRECT", "REJECT" }) do
+		policies[#policies + 1] = name
+	end
+	table.sort(policies)
+
+	luci.http.prepare_content("application/json")
+	luci.http.write_json({
+		active = active_sid ~= nil,
+		sid = active_sid,
+		policies = policies,
+		rules = nixio.fs.readfile(CUSTOM_RULES_FILE) or ""
+	})
+end
+
+function clash_custom_rules_save()
+	local sid = luci.http.formvalue("sid")
+	local active_sid = resolve_active_clash_sid(sid)
+	if not active_sid then
+		luci.http.status(409, "Conflict")
+		luci.http.prepare_content("application/json")
+		luci.http.write_json({ success = false, message = "inactive" })
+		return
+	end
+
+	-- 只做最基本的规整：去掉 CR 与首尾空白行，注释原样留着（面板上还能看懂）
+	local text = tostring(luci.http.formvalue("rules") or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
+	text = text:gsub("^%s*\n", ""):gsub("\n%s*$", "")
+	if text:sub(-1) ~= "\n" then
+		text = text .. "\n"
+	end
+	if text == "\n" then
+		text = ""
+	end
+	nixio.fs.writefile(CUSTOM_RULES_FILE, text)
+
+	local workdir = CLASH_WORKDIR_ROOT .. active_sid
+	local runtime = workdir .. "/config.yaml"
+	local helper = string.format("/usr/bin/lua %s", luci.util.shellquote(CLASH_YAML_HELPER))
+
+	-- 用 exec 而不是 call：要把 merge 打印的 custom_rules/skipped 统计拿回来告诉面板
+	local stats = luci.sys.exec(string.format("%s merge %s %s %s 2>/dev/null",
+		helper,
+		luci.util.shellquote(workdir .. "/raw.yaml"),
+		luci.util.shellquote(workdir .. "/overlay.yaml"),
+		luci.util.shellquote(runtime)))
+	if not stats or stats == "" then
+		luci.http.prepare_content("application/json")
+		luci.http.write_json({ success = false, message = "regen_failed" })
+		return
+	end
+
+	luci.sys.call(string.format("%s append_client_policy_rules %s %s >/dev/null 2>&1",
+		helper, luci.util.shellquote(runtime), luci.util.shellquote(active_sid)))
+
+	local injected = tonumber(string.match(stats, "custom_rules=(%d+)"))
+	local skipped = tonumber(string.match(stats, "custom_rules_skipped=(%d+)"))
+
+	-- 热重载：mihomo 原生接口，不重启进程、不重播连接
+	local body = string.format('{"path":"%s"}', runtime)
+	local ret = clash_api_request(active_sid, "PUT", "/configs?force=true", body, 20)
+	local ok = ret ~= nil and ret.code ~= nil and ret.code >= 200 and ret.code < 300
+	local restarted = false
+	if not ok then
+		luci.sys.call("/etc/init.d/shadowsocksr restart >/dev/null 2>&1 &")
+		restarted = true
+	end
+
+	luci.http.prepare_content("application/json")
+	luci.http.write_json({
+		success = ok or restarted,
+		restarted = restarted,
+		injected = injected,
+		skipped = skipped,
 		code = ret and ret.code or nil
 	})
 end

@@ -42,6 +42,7 @@ local current_sid = self.map:get(section, "global_server") or "nil"
 				<input type="button" id="ssr-clash-rules-export" class="btn cbi-button" value="<%:Export Client Rules%>" style="display:none" />
 				<input type="button" id="ssr-clash-rules-clear" class="btn cbi-button" value="<%:Clear All Rules%>" style="display:none" />
 				<input type="button" id="ssr-clash-rules-save" class="btn cbi-button cbi-button-apply" value="<%:Save%>" style="display:none" />
+				<input type="button" id="ssr-clash-domain-rules-save" class="btn cbi-button cbi-button-apply" value="<%:Save%>" style="display:none" />
 				<input type="button" id="ssr-clash-modal-close" class="btn cbi-button" value="<%:Close%>" />
 			</div>
 		</div>
@@ -54,6 +55,10 @@ local current_sid = self.map:get(section, "global_server") or "nil"
 				<button type="button" class="scui-nav-item" data-mode="rules">
 					<span class="scui-nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="13" height="9" rx="2"/><path d="M18 8h3.5"/><path d="M2.5 17.5h13"/><path d="M18 15.5h3.5"/></svg></span>
 					<span class="scui-nav-text"><%:Client Rules%></span>
+				</button>
+				<button type="button" class="scui-nav-item" data-mode="domainrules">
+					<span class="scui-nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h7"/><path d="m17 15 2 2 3.5-3.5"/></svg></span>
+					<span class="scui-nav-text"><%:Custom Domain Rules%></span>
 				</button>
 				<button type="button" class="scui-nav-item" data-mode="components">
 					<span class="scui-nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M8 10.5 12 14.5 16 10.5"/><path d="M4.5 16.5v2A2.5 2.5 0 0 0 7 21h10a2.5 2.5 0 0 0 2.5-2.5v-2"/></svg></span>
@@ -81,6 +86,21 @@ local current_sid = self.map:get(section, "global_server") or "nil"
 							</thead>
 							<tbody id="ssr-clash-client-rules-body"></tbody>
 						</table>
+					</div>
+				</div>
+
+				<div class="scui-pane" id="ssr-clash-pane-domainrules" style="display:none">
+					<div class="ssr-domain-rules">
+						<div class="scui-rules-note">
+							<%:One Clash rule per line, injected before every rule from the subscription. Format: TYPE,ARGUMENT,POLICY — the policy must be an existing proxy group (or DIRECT / REJECT).%>
+							<br />
+							<%:Example%>: <code>DOMAIN-SUFFIX,mypikpak.com,HK</code> &nbsp; <code>DOMAIN-KEYWORD,dl-a10b-,DIRECT</code>
+						</div>
+						<textarea id="ssr-clash-domain-rules-input" spellcheck="false" rows="14" placeholder="DOMAIN-SUFFIX,example.com,HK&#10;DOMAIN-KEYWORD,ads-,REJECT"></textarea>
+						<div class="ssr-domain-rules-tools">
+							<input type="button" id="ssr-clash-domain-rules-template" class="btn cbi-button" value="<%:Insert PikPak Template%>" />
+							<span id="ssr-clash-domain-rules-hint" class="ssr-domain-rules-hint"></span>
+						</div>
 					</div>
 				</div>
 
@@ -256,6 +276,41 @@ local current_sid = self.map:get(section, "global_server") or "nil"
 		color: #fff;
 	}
 
+	/* 自定义域名规则页签 */
+	#ssr-clash-pane-domainrules .ssr-domain-rules { display: flex; flex-direction: column; gap: 10px; }
+	#ssr-clash-pane-domainrules textarea {
+		width: 100%;
+		box-sizing: border-box;
+		min-height: 280px;
+		padding: 10px 12px;
+		border: 1px solid var(--scui-border, #d4d9e2);
+		border-radius: 8px;
+		background: var(--scui-panel-bg, #fff);
+		color: inherit;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+		font-size: 12.5px;
+		line-height: 1.6;
+		resize: vertical;
+		tab-size: 2;
+	}
+	#ssr-clash-pane-domainrules code {
+		padding: 1px 5px;
+		border-radius: 4px;
+		background: rgba(127, 127, 127, 0.14);
+		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	}
+	#ssr-clash-pane-domainrules .ssr-domain-rules-tools {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		flex-wrap: wrap;
+	}
+	#ssr-clash-pane-domainrules .ssr-domain-rules-hint {
+		font-size: 12px;
+		opacity: 0.72;
+		word-break: break-all;
+	}
+
 	@media (max-width: 900px) {
 		#ssr-clash-modal .scui-modal-body.scui-has-nav { flex-direction: column; }
 		#ssr-clash-modal .scui-nav {
@@ -390,10 +445,11 @@ if (typeof(window.ssrClashResetDefaults) !== "function") {
 		<% end -%>
 	};
 
-	// 三个页签：代理组 / 客户端规则 / 组件更新
+	// 四个页签：代理组 / 客户端规则 / 自定义规则 / 组件更新
 	var PANES = {
 		groups: 'ssr-clash-pane-groups',
 		rules: 'ssr-clash-pane-rules',
+		domainrules: 'ssr-clash-pane-domainrules',
 		components: 'ssr-clash-pane-components'
 	};
 
@@ -405,10 +461,17 @@ if (typeof(window.ssrClashResetDefaults) !== "function") {
 		'ssr-clash-rules-import'
 	];
 
+	var DOMAIN_RULES_BUTTONS = [
+		'ssr-clash-domain-rules-save'
+	];
+
+	var ALL_MODE_BUTTONS = RULES_BUTTONS.concat(DOMAIN_RULES_BUTTONS);
+
 	// 每个页签在标题栏显示哪些按钮（代理组 / 组件更新各自带操作条）
 	var MODE_BUTTONS = {
 		groups: [],
 		rules: RULES_BUTTONS,
+		domainrules: DOMAIN_RULES_BUTTONS,
 		components: []
 	};
 
@@ -451,7 +514,7 @@ if (typeof(window.ssrClashResetDefaults) !== "function") {
 		}
 
 		var active = MODE_BUTTONS[mode] || [];
-		RULES_BUTTONS.forEach(function(id) { show(id, active.indexOf(id) >= 0); });
+		ALL_MODE_BUTTONS.forEach(function(id) { show(id, active.indexOf(id) >= 0); });
 
 		var items = document.querySelectorAll('#ssr-clash-nav .scui-nav-item');
 		for (var i = 0; i < items.length; i++) {
@@ -516,6 +579,9 @@ if (typeof(window.ssrClashResetDefaults) !== "function") {
 		},
 		rules: function() {
 			openClientRulesPanel(currentPanelSid);
+		},
+		domainrules: function() {
+			openDomainRulesPanel(currentPanelSid);
 		},
 		components: function() {
 			initComponents();
@@ -869,6 +935,132 @@ if (typeof(window.ssrClashResetDefaults) !== "function") {
 		return false;
 	}
 
+	// ------------------------------------------------------------ 自定义域名规则
+
+	var domainRulesPolicies = [];
+
+	function domainRulesInput() {
+		return $('ssr-clash-domain-rules-input');
+	}
+
+	function setDomainRulesHint(text) {
+		var el = $('ssr-clash-domain-rules-hint');
+		if (el) {
+			el.textContent = text || '';
+		}
+	}
+
+	// 模板里的目标组必须真实存在，否则整条规则会被丢掉。
+	// 优先挑地区组，其次任意代理组，都没有就只能交给用户手改。
+	function pickDefaultPolicy() {
+		var preferred = ['HK', 'Proxies', 'Final'];
+		var i;
+		for (i = 0; i < preferred.length; i++) {
+			if (domainRulesPolicies.indexOf(preferred[i]) >= 0) {
+				return preferred[i];
+			}
+		}
+		for (i = 0; i < domainRulesPolicies.length; i++) {
+			var name = domainRulesPolicies[i];
+			if (name === 'DIRECT' || name === 'REJECT' || name.indexOf('♻️') === 0) {
+				continue;
+			}
+			return name;
+		}
+		return 'DIRECT';
+	}
+
+	function buildPikpakTemplate() {
+		var group = pickDefaultPolicy();
+		return [
+			'# ===== PikPak 网盘 =====',
+			'# 下载 CDN：没被墙也不限制地区，直连能跑满带宽、不烧机场流量',
+			'# （顺序重要：这两条必须排在下面的 DOMAIN-SUFFIX 前面）',
+			'DOMAIN-KEYWORD,dl-a10b-,DIRECT',
+			'DOMAIN-KEYWORD,dl-z01a-,DIRECT',
+			'# 主站 / API / 地区检测：PikPak 主动屏蔽大陆 IP，必须显式走代理',
+			'DOMAIN-SUFFIX,mypikpak.com,' + group,
+			'DOMAIN-SUFFIX,mypikpak.net,' + group,
+			'DOMAIN-SUFFIX,pikpak.me,' + group,
+			'DOMAIN-SUFFIX,pikpakdrive.com,' + group
+		].join('\n');
+	}
+
+	function insertPikpakTemplate() {
+		var box = domainRulesInput();
+		if (!box) {
+			return false;
+		}
+		if (box.value.indexOf('mypikpak.com') >= 0) {
+			setPanelStatus('<%:The PikPak template is already present.%>', 'warn');
+			return false;
+		}
+		var head = box.value.replace(/\s+$/, '');
+		box.value = head + (head === '' ? '' : '\n\n') + buildPikpakTemplate() + '\n';
+		setDomainRulesHint('<%:Template inserted. Click Save to apply.%>');
+		return false;
+	}
+
+	function openDomainRulesPanel(sid) {
+		currentEditorSid = sid;
+		setPanelStatus('<%:Loading...%>', 'busy');
+
+		window.ssrXHR.get('<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_custom_rules")%>', {
+			sid: sid
+		}, function(x, result) {
+			if (!result || !result.active) {
+				setPanelStatus('<%:This Clash total node is not active. Apply this node first.%>', 'warn');
+				setDomainRulesHint('');
+				return;
+			}
+
+			domainRulesPolicies = normalizeList(result.policies);
+			var box = domainRulesInput();
+			if (box) {
+				box.value = result.rules || '';
+			}
+
+			if (domainRulesPolicies.length === 0) {
+				setDomainRulesHint('');
+			} else {
+				var shown = domainRulesPolicies.slice(0, 14);
+				setDomainRulesHint('<%:Available targets%>: ' + shown.join(' / ') +
+					(domainRulesPolicies.length > shown.length ? ' …' : ''));
+			}
+			setPanelStatus('<%:Ready.%>', 'ok');
+		});
+		return false;
+	}
+
+	function saveDomainRules(btn) {
+		if (!currentEditorSid) {
+			return false;
+		}
+
+		var box = domainRulesInput();
+		var original = btn.value;
+		btn.disabled = true;
+		btn.value = '<%:Saving...%>';
+
+		window.ssrXHR.post('<%=luci.dispatcher.build_url("admin", "services", "shadowsocksr", "clash_custom_rules_save")%>', {
+			sid: currentEditorSid,
+			rules: box ? box.value : ''
+		}, function(x, result) {
+			btn.disabled = false;
+			btn.value = original;
+			if (result && result.success) {
+				var detail = '';
+				if (typeof result.injected === 'number') {
+					detail = ' (<%:applied%>=' + result.injected + ', <%:skipped%>=' + (result.skipped || 0) + ')';
+				}
+				setPanelStatus('<%:Custom domain rules saved.%>' + detail, 'ok');
+			} else {
+				setPanelStatus('<%:Failed to save custom domain rules.%>', 'err');
+			}
+		});
+		return false;
+	}
+
 	function loadGroups(sid) {
 		if (sid) {
 			currentPanelSid = sid;
@@ -1049,6 +1241,18 @@ if (typeof(window.ssrClashResetDefaults) !== "function") {
 					}
 				});
 				return false;
+			};
+		}
+
+		var domainTemplateBtn = $('ssr-clash-domain-rules-template');
+		if (domainTemplateBtn) {
+			domainTemplateBtn.onclick = insertPikpakTemplate;
+		}
+
+		var domainSaveBtn = $('ssr-clash-domain-rules-save');
+		if (domainSaveBtn) {
+			domainSaveBtn.onclick = function() {
+				return saveDomainRules(this);
 			};
 		}
 

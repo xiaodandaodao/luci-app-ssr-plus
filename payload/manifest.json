@@ -1,13 +1,13 @@
 {
   "format": 1,
-  "generated_from_version": "196-r1903",
-  "generated_from_commit": "16617be",
+  "generated_from_version": "196-r1904",
+  "generated_from_commit": "32833cc",
   "patch": "ssrplus-local-changes.patch",
   "packages": {
     "app": "luci-app-ssr-plus",
     "i18n": "luci-i18n-ssr-plus-zh-cn"
   },
-  "mtime": 1791367724,
+  "mtime": 1791641213,
   "files": [
     {
       "target": "app",
@@ -15,7 +15,7 @@
       "source": "luci-app-ssr-plus/luasrc/controller/shadowsocksr.lua",
       "new": false,
       "mode": "0644",
-      "sha256": "0d11acf43707fd6625deabae443a8cef410bcd654bbed7935174d8ca39220df9"
+      "sha256": "4453efd0f78edd491b142d3a4566b002aebc3f64f57066d681ee00c493b24967"
     },
     {
       "target": "app",
@@ -47,7 +47,7 @@
       "source": "luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm",
       "new": false,
       "mode": "0644",
-      "sha256": "fe9692f408a41eb279aae37cec8567cfdda74d4e855e71aebe8e242143889251"
+      "sha256": "5daeb50ac68996753e635414245107d983153a34bf8382864585c8c65f5b6ecb"
     },
     {
       "target": "app",
@@ -71,7 +71,7 @@
       "source": "luci-app-ssr-plus/po/zh_Hans/ssr-plus.po",
       "new": false,
       "mode": "0644",
-      "sha256": "d7476537a141403f37d2dd6db8c110cb7eaaf3d385f720df6a5ee90073a8f8e8"
+      "sha256": "d26e0942b3aa52ab3f639a96076215d77ee03b2c6e17faf0cfa3e48eb11cab57"
     },
     {
       "target": "app",
@@ -79,7 +79,7 @@
       "source": "luci-app-ssr-plus/root/etc/init.d/shadowsocksr",
       "new": false,
       "mode": "0755",
-      "sha256": "5f31ba4a58ceeb5c0ac35f6598f48f4b59dedfbc5e1da3fc369282fdbf27df68"
+      "sha256": "2a695ee4314acf0a16f72f024f350ba6cbca31bd151c2623409cb9954802f4eb"
     },
     {
       "target": "app",
@@ -87,7 +87,7 @@
       "source": "luci-app-ssr-plus/root/usr/share/shadowsocksr/clash_yaml.lua",
       "new": false,
       "mode": "0644",
-      "sha256": "b2b099c57f587625215e1161397bd5a5669e3688978e1ae0da713d45530ad6f8"
+      "sha256": "1f1776da37e7dcca734bc03000eaf8f9ac4f7a2c000e3ba35b7a57c0fe68c338"
     },
     {
       "target": "app",
