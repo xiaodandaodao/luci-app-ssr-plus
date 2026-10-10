@@ -1,13 +1,13 @@
 {
   "format": 1,
-  "generated_from_version": "196-r1904",
-  "generated_from_commit": "0dbff4b",
+  "generated_from_version": "196-r1905",
+  "generated_from_commit": "c2873aa",
   "patch": "ssrplus-local-changes.patch",
   "packages": {
     "app": "luci-app-ssr-plus",
     "i18n": "luci-i18n-ssr-plus-zh-cn"
   },
-  "mtime": 1791641464,
+  "mtime": 1791642071,
   "files": [
     {
       "target": "app",
@@ -47,7 +47,7 @@
       "source": "luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm",
       "new": false,
       "mode": "0644",
-      "sha256": "5daeb50ac68996753e635414245107d983153a34bf8382864585c8c65f5b6ecb"
+      "sha256": "141808885e80ad071e570a1951d9c07a57f70bf7cc3dc3eeb728ce1a1599d9b6"
     },
     {
       "target": "app",

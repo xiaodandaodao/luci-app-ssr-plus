@@ -974,14 +974,16 @@ if (typeof(window.ssrClashResetDefaults) !== "function") {
 		var group = pickDefaultPolicy();
 		return [
 			'# ===== PikPak 网盘 =====',
-			'# 下载 CDN：没被墙也不限制地区，直连能跑满带宽、不烧机场流量',
-			'# （顺序重要：这两条必须排在下面的 DOMAIN-SUFFIX 前面）',
+			'# 下载 CDN（形如 dl-a10b-0858.mypikpak.com / dl-z01a-*.mypikpak.com）：',
+			'# 国内直连更快，也不烧机场流量。顺序重要：这两条必须排在下面的 DOMAIN-SUFFIX 前面。',
 			'DOMAIN-KEYWORD,dl-a10b-,DIRECT',
 			'DOMAIN-KEYWORD,dl-z01a-,DIRECT',
-			'# 主站 / API / 地区检测：PikPak 主动屏蔽大陆 IP，必须显式走代理',
+			'# 主站 / API / 地区检测 / 下载调度：PikPak 主动屏蔽大陆 IP，必须显式走代理。',
+			'# pikpak.io（dl.pikpak.io 等）走 Cloudflare，国内直连会被墙，同样不能漏。',
 			'DOMAIN-SUFFIX,mypikpak.com,' + group,
 			'DOMAIN-SUFFIX,mypikpak.net,' + group,
 			'DOMAIN-SUFFIX,pikpak.me,' + group,
+			'DOMAIN-SUFFIX,pikpak.io,' + group,
 			'DOMAIN-SUFFIX,pikpakdrive.com,' + group
 		].join('\n');
 	}

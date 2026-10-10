@@ -1,5 +1,5 @@
 diff --git a/Makefile b/Makefile
-index 425251a..88f16b3 100644
+index 425251a..cbe9c63 100644
 --- a/Makefile
 +++ b/Makefile
 @@ -4,7 +4,11 @@ LUCI_TITLE:=luci-app-ssr-plus
@@ -8,10 +8,10 @@ index 425251a..88f16b3 100644
  PKG_VERSION:=196
 -PKG_RELEASE:=19
 +# PKG_RELEASE 编码规则：<上游 release><两位本方修订序>
-+#   上游 v196.19 的第 1 版 = 1901，第 2 版 = 1902，第 3 版 = 1903；上游升到 r20 则重新从 2001 起。
++#   上游 v196.19 的第 1 版 = 1901，……，第 5 版 = 1905；上游升到 r20 则重新从 2001 起。
 +#   必须是纯数字且单调递增 —— apk 的 "-r" 后只接受整数（RE13 这类写法会被 mkpkg 拒绝），
 +#   数字编码同时保证 opkg/apk 都会把它判定为「比旧版新」的升级。
-+PKG_RELEASE:=1904
++PKG_RELEASE:=1905
  
  PKG_CONFIG_DEPENDS:= \
  	CONFIG_PACKAGE_$(PKG_NAME)_Iptables_Transparent_Proxy \
@@ -2158,10 +2158,10 @@ index 0000000..59de39d
 +})();
 +</script>
 diff --git a/luasrc/view/shadowsocksr/clash_main_panel.htm b/luasrc/view/shadowsocksr/clash_main_panel.htm
-index 9a0f845..a7ff4f7 100644
+index 9a0f845..6793638 100644
 --- a/luasrc/view/shadowsocksr/clash_main_panel.htm
 +++ b/luasrc/view/shadowsocksr/clash_main_panel.htm
-@@ -4,1124 +4,1297 @@ local clash_nodes = self.clash_nodes or {}
+@@ -4,1124 +4,1299 @@ local clash_nodes = self.clash_nodes or {}
  local current_sid = self.map:get(section, "global_server") or "nil"
  -%>
  <div id="ssr-clash-main-panel-wrap">
@@ -3782,14 +3782,16 @@ index 9a0f845..a7ff4f7 100644
 +		var group = pickDefaultPolicy();
 +		return [
 +			'# ===== PikPak 网盘 =====',
-+			'# 下载 CDN：没被墙也不限制地区，直连能跑满带宽、不烧机场流量',
-+			'# （顺序重要：这两条必须排在下面的 DOMAIN-SUFFIX 前面）',
++			'# 下载 CDN（形如 dl-a10b-0858.mypikpak.com / dl-z01a-*.mypikpak.com）：',
++			'# 国内直连更快，也不烧机场流量。顺序重要：这两条必须排在下面的 DOMAIN-SUFFIX 前面。',
 +			'DOMAIN-KEYWORD,dl-a10b-,DIRECT',
 +			'DOMAIN-KEYWORD,dl-z01a-,DIRECT',
-+			'# 主站 / API / 地区检测：PikPak 主动屏蔽大陆 IP，必须显式走代理',
++			'# 主站 / API / 地区检测 / 下载调度：PikPak 主动屏蔽大陆 IP，必须显式走代理。',
++			'# pikpak.io（dl.pikpak.io 等）走 Cloudflare，国内直连会被墙，同样不能漏。',
 +			'DOMAIN-SUFFIX,mypikpak.com,' + group,
 +			'DOMAIN-SUFFIX,mypikpak.net,' + group,
 +			'DOMAIN-SUFFIX,pikpak.me,' + group,
++			'DOMAIN-SUFFIX,pikpak.io,' + group,
 +			'DOMAIN-SUFFIX,pikpakdrive.com,' + group
 +		].join('\n');
 +	}
