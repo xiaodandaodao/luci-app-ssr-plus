@@ -184,7 +184,7 @@ LuCI 侧边栏的独立页面 —— 三处来回跳。现在合并成一个弹�
 > 后绑定的那个必然冲突。与本次改动无关，功能不受影响（实测重载后 12 条活跃连接正常、
 > 端口仍在监听），因此未在本批改动里调整端口配置。
 
-### ⑩ 自定义分流规则 + 修复域名规则在 redir 模式下失效（1905，1906 补 pikpak.site）
+### ⑩ 自定义分流规则 + 修复域名规则在 redir 模式下失效（1905；1906 补 pikpak.site 与面板深色可读性）
 
 起因是 PikPak 网盘一直提示「当前地区不可用」，而把 Final / 全局都选成香港、美国都没用。
 查下来跟「选哪个节点」无关，是两个叠在一起的问题：
@@ -207,6 +207,7 @@ LuCI 侧边栏的独立页面 —— 三处来回跳。现在合并成一个弹�
 | 同上 | 新增 `inject_custom_rules()`：读 `/etc/ssrplus/custom_rules.conf`（一行一条 Clash 原生规则，`#` 注释、空行忽略），插到 `doc.rules` **最前**；逐条校验目标策略是否存在，不存在就跳过并计数（目标写错时不能让 mihomo 拒收整份配置）；输出统计增加 `custom_rules=` / `custom_rules_skipped=` |
 | `luasrc/controller/shadowsocksr.lua` | 新增 `clash_custom_rules`（GET：返回当前规则 + 面板可用策略清单）与 `clash_custom_rules_save`（POST：写文件 → 重新生成 → `append_client_policy_rules` → `PUT /configs?force=true` 热重载，非 2xx 才兜底重启），回传 `injected` / `skipped` |
 | `luasrc/view/shadowsocksr/clash_main_panel.htm` | 左导航新增第 4 项「自定义分流规则」：等宽字体规则编辑框 + 「插入 PikPak 模板」按钮 + 可用目标组提示；模板默认挑 HK 组（缺省回退 Proxies / Final） |
+| 同上 | 修复该页签编辑框在**深色主题下看不清**：CSS 里误用了两个并不存在的变量 `--scui-border` / `--scui-panel-bg`，回落成写死的 `#d4d9e2` / `#fff`，而 `color: inherit` 在深色下拿到的是浅色文字 —— 结果是**白底浅字**（实测 `bg=rgb(255,255,255)` / `color=rgb(236,239,245)`，对比度约 1.1:1）。改为本设计系统真实存在的 `--scui-line-strong` / `--scui-surface-2` / `--scui-fg`，并补 `::placeholder`、`hover` / `focus` 焦点环、`caret-color`、`::selection`；同时把 `code` 小标签和底部「可用目标组」提示也改成随主题走（对比度提升到 13~14:1） |
 | `root/etc/init.d/shadowsocksr` | 修复 `_collect_clash_sid()`：本地上传 YAML 时 `clash_path` 指向 `$CLASH_CONFIG_DIR/<文件 md5>.yaml`，**文件名不是 uci section 名**，旧逻辑按 section 名保留文件会把这个配置当孤儿缓存删掉，之后重启就报「Clash 节点未配置订阅 URL/本地配置，无法启动」。现在把 `clash_path` 的基名也加进保留集合 |
 | `po/zh_Hans/ssr-plus.po`、`po/templates/ssr-plus.pot` | 新增 11 条文案；顺带清掉 po 里被追加两遍的重复条目，并把 `pot` 与 `po` 对齐（此前落后 67 条，`msgmerge` 会把它们判成 obsolete） |
 
