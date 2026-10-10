@@ -979,11 +979,13 @@ if (typeof(window.ssrClashResetDefaults) !== "function") {
 			'DOMAIN-KEYWORD,dl-a10b-,DIRECT',
 			'DOMAIN-KEYWORD,dl-z01a-,DIRECT',
 			'# 主站 / API / 地区检测 / 下载调度：PikPak 主动屏蔽大陆 IP，必须显式走代理。',
-			'# pikpak.io（dl.pikpak.io 等）走 Cloudflare，国内直连会被墙，同样不能漏。',
+			'# pikpak.io / pikpak.site 是 Cloudflare 承载的下载与调度域名（104.18.x），',
+			'# 实测国内直连 10 秒以上无响应，同样不能漏。',
 			'DOMAIN-SUFFIX,mypikpak.com,' + group,
 			'DOMAIN-SUFFIX,mypikpak.net,' + group,
 			'DOMAIN-SUFFIX,pikpak.me,' + group,
 			'DOMAIN-SUFFIX,pikpak.io,' + group,
+			'DOMAIN-SUFFIX,pikpak.site,' + group,
 			'DOMAIN-SUFFIX,pikpakdrive.com,' + group
 		].join('\n');
 	}

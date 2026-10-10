@@ -11,7 +11,7 @@
 | 上游仓库 | `https://github.com/fw876/helloworld` |
 | 基线 tag | **v196.19** |
 | 基线 commit | `16617be`（luci-app-ssr-plus: fix legacy SS subscription parsing with Xray） |
-| 包版本 | `luci-app-ssr-plus` `196-r1905`（上游 v196.19 为 `196-r19`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r19 的第 5 版」= `1905`（第 1 版 `1901`，第 2 版 `1902`，第 3 版 `1903`，第 4 版 `1904`） |
+| 包版本 | `luci-app-ssr-plus` `196-r1906`（上游 v196.19 为 `196-r19`）<br>版本号规则：`<上游 release><两位本方修订序>`，即「上游 r19 的第 6 版」= `1906`（第 1 版 `1901`，第 2 版 `1902`，第 3 版 `1903`，第 4 版 `1904`，第 5 版 `1905`） |
 | 许可证 | GPL-3.0（随仓库保留上游 `LICENSE` 原文，未改动） |
 
 上游 monorepo 里 `luci-app-ssr-plus/` 是一个子目录，本仓库把它**提升为仓库根**：
@@ -40,7 +40,7 @@
 | `afb3aaf` | 可选 IPv6 流量代理：nftables IPv6 TCP/UDP 规则、AAAA 地址集、国内 IPv6 地址库（默认关闭） |
 | `16617be` | 修复 legacy SS 订阅链接在 Xray 下的解析（整段 Base64 先解码再解析端点） |
 
-冲突裁决：`Makefile` 的 `PKG_RELEASE` 取我们的（同步当时为 `1901`，现为 `1905`）；`po/zh_Hans/ssr-plus.po`
+冲突裁决：`Makefile` 的 `PKG_RELEASE` 取我们的（同步当时为 `1901`，现为 `1906`）；`po/zh_Hans/ssr-plus.po`
 两边的新增条目都保留（我们的 Clash 面板文案 + 上游 IPv6/AnyTLS 文案）。
 
 ### ①–⑦ 本仓库的改动
@@ -184,7 +184,7 @@ LuCI 侧边栏的独立页面 —— 三处来回跳。现在合并成一个弹�
 > 后绑定的那个必然冲突。与本次改动无关，功能不受影响（实测重载后 12 条活跃连接正常、
 > 端口仍在监听），因此未在本批改动里调整端口配置。
 
-### ⑩ 自定义分流规则 + 修复域名规则在 redir 模式下失效（1905）
+### ⑩ 自定义分流规则 + 修复域名规则在 redir 模式下失效（1905，1906 补 pikpak.site）
 
 起因是 PikPak 网盘一直提示「当前地区不可用」，而把 Final / 全局都选成香港、美国都没用。
 查下来跟「选哪个节点」无关，是两个叠在一起的问题：
@@ -218,7 +218,8 @@ DOMAIN-KEYWORD,dl-z01a-,DIRECT
 DOMAIN-SUFFIX,mypikpak.com,HK       # 主站 / API / 地区检测，必须走代理
 DOMAIN-SUFFIX,mypikpak.net,HK
 DOMAIN-SUFFIX,pikpak.me,HK
-DOMAIN-SUFFIX,pikpak.io,HK          # dl.pikpak.io 等走 Cloudflare，国内直连会被墙
+DOMAIN-SUFFIX,pikpak.io,HK          # Cloudflare 承载的下载/调度域名（104.18.x）
+DOMAIN-SUFFIX,pikpak.site,HK        # 同上，实测是 PikPak 最高频的域名
 DOMAIN-SUFFIX,pikpakdrive.com,HK
 ```
 
@@ -227,8 +228,11 @@ DOMAIN-SUFFIX,pikpakdrive.com,HK
 > 实测（主路由 192.168.1.1，真实客户端流量）：`mypikpak.com` / `user.mypikpak.com` /
 > `api-drive.mypikpak.com` / `static.mypikpak.com` 等全部命中 `DomainSuffix(mypikpak.com) using HK`，
 > 注册页不再提示「当前地区不可用」。
-> 注：`pikpak.io` 这一条是实测补上的 —— 日志里 `dl.pikpak.io:443` 曾未被任何规则命中而落到
-> `match Match using Final`，走的是当时 Final 链条上的节点（台湾），属意外行为。
+> 注：`pikpak.io` 与 `pikpak.site` 两条都是实测补上的 —— 日志里 `dl.pikpak.io:443`（3 次）与
+> `dl.pikpak.site:443`（34 次，PikPak 最高频）曾未被任何规则命中而落到 `match Match using Final`，
+> 走的是当时 Final 链条上的节点（台湾），属意外行为。两者都解析到 Cloudflare `104.18.x`，
+> 路由器直连实测 10 秒以上无响应，必须走代理。其中 `pikpak.io` 随 r1905 发布，
+> `pikpak.site` 在 r1905 发出后几分钟才发现，随 r1906 补入。
 
 ## 3. 本仓库新增的非上游文件
 
