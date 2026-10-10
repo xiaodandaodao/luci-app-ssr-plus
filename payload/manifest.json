@@ -1,13 +1,13 @@
 {
   "format": 1,
   "generated_from_version": "196-r1904",
-  "generated_from_commit": "32833cc",
+  "generated_from_commit": "0dbff4b",
   "patch": "ssrplus-local-changes.patch",
   "packages": {
     "app": "luci-app-ssr-plus",
     "i18n": "luci-i18n-ssr-plus-zh-cn"
   },
-  "mtime": 1791641213,
+  "mtime": 1791641464,
   "files": [
     {
       "target": "app",
@@ -71,7 +71,7 @@
       "source": "luci-app-ssr-plus/po/zh_Hans/ssr-plus.po",
       "new": false,
       "mode": "0644",
-      "sha256": "d26e0942b3aa52ab3f639a96076215d77ee03b2c6e17faf0cfa3e48eb11cab57"
+      "sha256": "fb1a6913bfcdeef37318c0705273f543a3e51fed0c900d1a41e24b8d9a76f0f8"
     },
     {
       "target": "app",

@@ -4667,7 +4667,7 @@ index a1d040d..774579f 100644
  						</div>
  						<div class="component-select-item">
 diff --git a/po/templates/ssr-plus.pot b/po/templates/ssr-plus.pot
-index baaf4cd..c6a0bb4 100644
+index baaf4cd..3cba305 100644
 --- a/po/templates/ssr-plus.pot
 +++ b/po/templates/ssr-plus.pot
 @@ -8,6 +8,14 @@ msgid ""
@@ -4832,8 +4832,213 @@ index baaf4cd..c6a0bb4 100644
  msgstr ""
  
  #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:10
+@@ -3378,3 +3438,204 @@ msgstr ""
+ 
+ msgid "Minimum idle sessions"
+ msgstr ""
++
++msgid "Client Rules"
++msgstr ""
++
++msgid "URL-Test Address"
++msgstr ""
++
++msgid "Leave empty to reuse the URL Test Address above."
++msgstr ""
++
++msgid "URL-Test Interval"
++msgstr ""
++
++msgid "Seconds between two health checks (minimum 30)."
++msgstr ""
++
++msgid "URL-Test Tolerance"
++msgstr ""
++
++msgid "Switch only when a node is faster by more than this value (milliseconds)."
++msgstr ""
++
++msgid "Upgrade completed. Reloading the page to apply the new interface."
++msgstr ""
++
++msgid "Upgrade completed. Restart SSR Plus to apply the new version."
++msgstr ""
++
++msgid "Upgrade completed. Reloading service to apply the new version."
++msgstr ""
++
++msgid "Service reloaded. The new version is now in use."
++msgstr ""
++
++msgid "Upgrade completed. Reload failed, restart SSR Plus manually."
++msgstr ""
++
++msgid "Auto Selected:"
++msgstr ""
++
++msgid "Current:"
++msgstr ""
++
++msgid "Effective Node:"
++msgstr ""
++
++msgid "Delay"
++msgstr ""
++
++msgid "Test URL"
++msgstr ""
++
++msgid "Interval"
++msgstr ""
++
++msgid "Speed Test"
++msgstr ""
++
++msgid "Test All Groups"
++msgstr ""
++
++msgid "Testing delay..."
++msgstr ""
++
++msgid "Delay test failed."
++msgstr ""
++
++msgid "No groups match the filter."
++msgstr ""
++
++msgid "Filter groups..."
++msgstr ""
++
++msgid "Proxy Groups"
++msgstr ""
++
++msgid "Nodes"
++msgstr ""
++
++msgid "Show all %d nodes"
++msgstr ""
++
++msgid "Show less"
++msgstr ""
++
++msgid "Expand"
++msgstr ""
++
++msgid "Collapse"
++msgstr ""
++
++msgid "Switch to this node"
++msgstr ""
++
++msgid "Fastest:"
++msgstr ""
++
++msgid "Selector"
++msgstr ""
++
++msgid "Direct"
++msgstr ""
++
++msgid "Reject"
++msgstr ""
++
++msgid "Proxy"
++msgstr ""
++
++msgid "Domestic"
++msgstr ""
++
++msgid "GlobalTV"
++msgstr ""
++
++msgid "AsianTV"
++msgstr ""
++
++msgid "Others"
++msgstr ""
++
++msgid "GLOBAL"
++msgstr ""
++
++msgid "url-test"
++msgstr ""
++
++msgid "fallback"
++msgstr ""
++
++msgid "load-balance"
++msgstr ""
++
++msgid "relay"
++msgstr ""
++
++msgid "Compatible"
++msgstr ""
++
++msgid "Pass"
++msgstr ""
++
++msgid "Clash Auto Selecting"
++msgstr ""
++
++msgid "Subscription configs are almost all manual selectors: the node you picked stays selected even after it goes down. Turning this on adds one auto group to every selector — same members, but Mihomo keeps picking whichever is fastest. Keep selecting individual nodes freely; choose the auto group in the panel to hand control back to Mihomo."
++msgstr ""
++
++msgid "Apply After Start"
++msgstr ""
++
++msgid "Automatically point every selector at its auto group each time the service starts. Turn it off to switch manually in the Proxy Group panel."
++msgstr ""
++
++msgid "IPv6 Traffic Proxy"
++msgstr ""
++
++msgid "Proxy IPv6 traffic using the selected running mode (requires nftables). Allow AAAA replies while enabled and restore the DNS filter when stopped."
++msgstr ""
++
++msgid "IPv6 proxy requires nftables."
++msgstr ""
++
++msgid "China IPv6 list update URL"
++msgstr ""
++
++msgid "China IPv6 Data"
++msgstr ""
++
++msgid "Custom Domain Rules"
++msgstr ""
++
++msgid "One Clash rule per line, injected before every rule from the subscription. Format: TYPE,ARGUMENT,POLICY — the policy must be an existing proxy group (or DIRECT / REJECT)."
++msgstr ""
++
++msgid "Example"
++msgstr ""
++
++msgid "Available targets"
++msgstr ""
++
++msgid "Insert PikPak Template"
++msgstr ""
++
++msgid "The PikPak template is already present."
++msgstr ""
++
++msgid "Template inserted. Click Save to apply."
++msgstr ""
++
++msgid "Custom domain rules saved."
++msgstr ""
++
++msgid "Failed to save custom domain rules."
++msgstr ""
++
++msgid "applied"
++msgstr ""
++
++msgid "skipped"
++msgstr ""
 diff --git a/po/zh_Hans/ssr-plus.po b/po/zh_Hans/ssr-plus.po
-index 831ac7f..2c828c4 100644
+index 831ac7f..00dcd36 100644
 --- a/po/zh_Hans/ssr-plus.po
 +++ b/po/zh_Hans/ssr-plus.po
 @@ -10,6 +10,14 @@ msgstr ""
@@ -5222,44 +5427,10 @@ index 831ac7f..2c828c4 100644
  msgid "Idle session check interval (seconds)"
  msgstr "空闲会话检查间隔（秒）"
  
-@@ -3885,3 +4175,71 @@ msgstr "国内 IPv6 地址库更新地址"
+@@ -3885,3 +4175,37 @@ msgstr "国内 IPv6 地址库更新地址"
  
  msgid "China IPv6 Data"
  msgstr "国内 IPv6 地址库"
-+
-+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm
-+msgid "Custom Domain Rules"
-+msgstr "自定义分流规则"
-+
-+msgid "One Clash rule per line, injected before every rule from the subscription. Format: TYPE,ARGUMENT,POLICY — the policy must be an existing proxy group (or DIRECT / REJECT)."
-+msgstr "一行一条 Clash 规则，插在订阅全部规则的最前面。格式：规则类型,参数,目标 —— 目标必须是已存在的代理组（或 DIRECT / REJECT）。"
-+
-+msgid "Example"
-+msgstr "例如"
-+
-+msgid "Available targets"
-+msgstr "可用目标组"
-+
-+msgid "Insert PikPak Template"
-+msgstr "插入 PikPak 模板"
-+
-+msgid "The PikPak template is already present."
-+msgstr "规则里已经有 PikPak 模板了"
-+
-+msgid "Template inserted. Click Save to apply."
-+msgstr "模板已插入，点「保存」生效"
-+
-+msgid "Custom domain rules saved."
-+msgstr "自定义分流规则已保存"
-+
-+msgid "Failed to save custom domain rules."
-+msgstr "自定义分流规则保存失败"
-+
-+msgid "applied"
-+msgstr "生效"
-+
-+msgid "skipped"
-+msgstr "跳过"
 +
 +#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm
 +msgid "Custom Domain Rules"
