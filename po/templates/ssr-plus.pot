@@ -8,6 +8,14 @@ msgid ""
 "fragmentation."
 msgstr ""
 
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:716
+msgid "%d picked"
+msgstr ""
+
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:708
+msgid "+ Custom Group"
+msgstr ""
+
 #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/server.lua:103
 msgid "0"
 msgstr ""
@@ -260,6 +268,10 @@ msgstr ""
 msgid "Auto Update Server subscription, GFW list and CHN route"
 msgstr ""
 
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:712
+msgid "Auto pick fastest"
+msgstr ""
+
 #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:918
 #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:1720
 #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:1736
@@ -333,6 +345,10 @@ msgstr ""
 #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:1068
 #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:1289
 msgid "Camouflage Type"
+msgstr ""
+
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:718
+msgid "Cancel"
 msgstr ""
 
 #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/server-config.lua:229
@@ -599,6 +615,10 @@ msgid ""
 "(tcp://8.8.8.8 or tls://dns.google:853)"
 msgstr ""
 
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:709
+msgid "Custom Groups"
+msgstr ""
+
 #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:625
 msgid "Custom Plugin Path"
 msgstr ""
@@ -723,6 +743,10 @@ msgstr ""
 
 #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/subscribe_actions_footer.htm:160
 msgid "Delete failed:"
+msgstr ""
+
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:723
+msgid "Delete this group"
 msgstr ""
 
 #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/control.lua:112
@@ -1047,6 +1071,10 @@ msgstr ""
 msgid "Filter Words splited by /"
 msgstr ""
 
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:715
+msgid "Filter nodes..."
+msgstr ""
+
 #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:1389
 msgid "FinalMask"
 msgstr ""
@@ -1191,6 +1219,10 @@ msgstr ""
 
 #: applications/luci-app-ssr-plus/root/usr/share/rpcd/acl.d/luci-app-ssr-plus.json:3
 msgid "Grant UCI access for luci-app-ssr-plus"
+msgstr ""
+
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:710
+msgid "Group name"
 msgstr ""
 
 #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:1224
@@ -1440,6 +1472,10 @@ msgstr ""
 msgid "KcpTun Version"
 msgstr ""
 
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:713
+msgid "Keywords, comma separated"
+msgstr ""
+
 #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/control.lua:32
 msgid "LAN Access Control"
 msgstr ""
@@ -1577,6 +1613,10 @@ msgid ""
 "entries are included when updating all subscriptions."
 msgstr ""
 
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:711
+msgid "Manual select"
+msgstr ""
+
 #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:47
 #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:90
 msgid "Matching release asset not found"
@@ -1697,6 +1737,10 @@ msgstr ""
 msgid "Nanjing Xinfeng 114DNS (114.114.114.114)"
 msgstr ""
 
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:722
+msgid "Need a group name and at least one node."
+msgstr ""
+
 #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:920
 msgid "New Reno"
 msgstr ""
@@ -1763,6 +1807,10 @@ msgid ""
 "Node order can be dragged with the mouse and takes effect immediately. The "
 "automatic switch order of server nodes is consistent with the node order in "
 "the table."
+msgstr ""
+
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:714
+msgid "Nodes are matched by keyword, so the group survives subscription updates. Pick nodes below, or type keywords directly."
 msgstr ""
 
 #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/advanced.lua:300
@@ -2278,9 +2326,21 @@ msgstr ""
 msgid "Save current subscribe settings"
 msgstr ""
 
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:721
+msgid "Save failed."
+msgstr ""
+
 #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/subscribe_actions_footer.htm:112
 #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/subscribe_actions_footer.htm:135
 msgid "Save failed:"
+msgstr ""
+
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:720
+msgid "Saved. Mihomo reloaded without restarting."
+msgstr ""
+
+#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm:719
+msgid "Saving and reloading..."
 msgstr ""
 
 #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm:763

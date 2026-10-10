@@ -9,7 +9,7 @@
 --       statusEl:  状态文字元素（可选）,
 --       sid:       订阅节点 id,
 --       xhr:       JSON XHR 封装（window.ssrXHR / XHR）,
---       urls:      { groups, switch, delayTest }
+--       urls:      { groups, switch, delayTest, customGroups, customSave }
 --   });
 --   ui.setSid(sid); ui.load();
 -- ============================================================================
@@ -600,6 +600,74 @@
 		.ssr-clash-ui .scui-node-name { max-width: 108px; }
 		.ssr-clash-ui .scui-card-head { flex-wrap: wrap; }
 	}
+
+	/* ------------------------------------------------ 自定义节点组编辑区 */
+	.ssr-clash-ui .scui-editor,
+	.scui-page .scui-editor { margin-bottom: 12px; }
+
+	.ssr-clash-ui .scui-editor-row,
+	.scui-page .scui-editor-row { display: flex; gap: 8px; margin-bottom: 8px; }
+
+	.ssr-clash-ui .scui-editor-row input,
+	.scui-page .scui-editor-row input { flex: 1 1 auto; min-width: 0; }
+
+	.ssr-clash-ui .scui-editor input,
+	.ssr-clash-ui .scui-editor select,
+	.ssr-clash-ui .scui-editor textarea,
+	.scui-page .scui-editor input,
+	.scui-page .scui-editor select,
+	.scui-page .scui-editor textarea {
+		padding: 6px 9px;
+		border: 1px solid var(--scui-line-strong);
+		border-radius: 8px;
+		background: var(--scui-surface);
+		color: var(--scui-fg);
+		font-family: inherit;
+		font-size: 13px;
+	}
+
+	.ssr-clash-ui .scui-kw,
+	.scui-page .scui-kw { width: 100%; resize: vertical; margin-bottom: 6px; }
+
+	.ssr-clash-ui .scui-hint,
+	.scui-page .scui-hint {
+		color: var(--scui-muted);
+		font-size: 12px;
+		line-height: 1.5;
+		margin-bottom: 8px;
+	}
+
+	.ssr-clash-ui .scui-picklist,
+	.scui-page .scui-picklist {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin-bottom: 8px;
+	}
+
+	.ssr-clash-ui .scui-picklist-tall,
+	.scui-page .scui-picklist-tall {
+		max-height: 220px;
+		overflow-y: auto;
+		padding: 2px;
+	}
+
+	.ssr-clash-ui .scui-editor .scui-node,
+	.scui-page .scui-editor .scui-node { cursor: pointer; }
+
+	.ssr-clash-ui .scui-node-del,
+	.scui-page .scui-node-del {
+		display: inline-flex;
+		margin-left: 4px;
+		opacity: 0.55;
+		cursor: pointer;
+	}
+
+	.ssr-clash-ui .scui-node-del:hover,
+	.scui-page .scui-node-del:hover { opacity: 1; }
+
+	.ssr-clash-ui .scui-editor-actions,
+	.scui-page .scui-editor-actions { display: flex; gap: 8px; }
 </style>
 
 <script type="text/javascript">
@@ -635,7 +703,24 @@ window.ssrClashUI = (function() {
 		fastest:     '<%:Fastest:%>',
 		emptyTitle:  '<%:No switchable proxy groups found.%>',
 
-		autoRegionOffHint: '<%:Turn on "Mihomo Smart Grouping and Auto Select" on the Servers page first.%>'
+		autoRegionOffHint: '<%:Turn on "Mihomo Smart Grouping and Auto Select" on the Servers page first.%>',
+
+		addGroup:    '<%:+ Custom Group%>',
+		customGroups: '<%:Custom Groups%>',
+		groupNamePh: '<%:Group name%>',
+		typeSelect:  '<%:Manual select%>',
+		typeUrlTest: '<%:Auto pick fastest%>',
+		kwPh:        '<%:Keywords, comma separated%>',
+		kwHint:      '<%:Nodes are matched by keyword, so the group survives subscription updates. Pick nodes below, or type keywords directly.%>',
+		filterNodesPh: '<%:Filter nodes...%>',
+		pickedCount: '<%:%d picked%>',
+		save:        '<%:Save%>',
+		cancel:      '<%:Cancel%>',
+		saving:      '<%:Saving and reloading...%>',
+		saved:       '<%:Saved. Mihomo reloaded without restarting.%>',
+		saveFailed:  '<%:Save failed.%>',
+		needNameNodes: '<%:Need a group name and at least one node.%>',
+		deleteGroup: '<%:Delete this group%>'
 	};
 
 	var TRANSLATE = {
@@ -671,7 +756,9 @@ window.ssrClashUI = (function() {
 		search: '<circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-3.6-3.6"/>',
 		check: '<polyline points="20 6 9 17 4 12"/>',
 		inbox: '<path d="M3 13h4l1.5 3h7L17 13h4"/><path d="M5 5h14l2 8v6H3v-6z"/>',
-		group: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>'
+		group: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
+		plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+		trash: '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/>'
 	};
 
 	// ------------------------------------------------------------------ 工具
@@ -796,6 +883,12 @@ window.ssrClashUI = (function() {
 		var filterText = '';
 		var expandedGroups = {};
 
+		// 自定义节点组：草稿状态 + 可选节点 / 已有定义
+		var custom = {
+			open: false, busy: false, defs: [], nodes: [],
+			name: '', type: 'select', keywords: [], filter: ''
+		};
+
 		if (!mount) {
 			return null;
 		}
@@ -838,8 +931,17 @@ window.ssrClashUI = (function() {
 			refreshBtn.type = 'button';
 			refreshBtn.appendChild(icon('refresh'));
 			refreshBtn.appendChild(el('span', null, TEXT.refresh));
-			refreshBtn.onclick = function() { load(); };
-			left.appendChild(refreshBtn);
+		refreshBtn.onclick = function() { load(); };
+		left.appendChild(refreshBtn);
+
+		if (urls.customGroups) {
+			var customBtn = el('button', 'scui-btn');
+			customBtn.type = 'button';
+			customBtn.appendChild(icon('plus'));
+			customBtn.appendChild(el('span', null, TEXT.addGroup));
+			customBtn.onclick = function() { openEditor(null); };
+			left.appendChild(customBtn);
+		}
 
 			var search = el('span', 'scui-search');
 			search.appendChild(icon('search'));
@@ -1084,6 +1186,182 @@ window.ssrClashUI = (function() {
 			return box;
 		}
 
+		// ---- 自定义节点组
+		function loadCustom() {
+			if (!xhr || !urls.customGroups) {
+				return;
+			}
+			xhr.get(urls.customGroups, { sid: sid }, function(x, result) {
+				if (result && result.active) {
+					custom.defs = result.defs || [];
+					custom.nodes = result.nodes || [];
+				}
+			});
+		}
+
+		function openEditor(def) {
+			custom.open = true;
+			custom.name = def ? def.name : '';
+			custom.type = def ? def.type : 'select';
+			custom.keywords = def ? (def.keywords || []).slice() : [];
+			custom.filter = '';
+			paint();
+		}
+
+		function saveCustom(params) {
+			if (custom.busy || !xhr || !urls.customSave) {
+				return;
+			}
+			if (!params.remove && (!params.name || !params.keywords.length)) {
+				err(TEXT.needNameNodes);
+				return;
+			}
+			custom.busy = true;
+			busy(TEXT.saving);
+			var data = { sid: sid, name: params.name };
+			if (params.remove) {
+				data.remove = '1';
+			} else {
+				data.type = params.type;
+				data.keywords = params.keywords.join(',');
+			}
+			var done = function(x, result) {
+				custom.busy = false;
+				if (result && result.success) {
+					ok(TEXT.saved);
+					custom.open = false;
+					load();
+				} else {
+					err(TEXT.saveFailed);
+				}
+			};
+			if (typeof xhr.post === 'function') {
+				xhr.post(urls.customSave, data, done);
+			} else {
+				xhr.get(urls.customSave, data, done);
+			}
+		}
+
+		function buildEditor() {
+			var box = el('section', 'scui-card scui-editor');
+
+			var head = el('div', 'scui-card-head');
+			head.appendChild(el('span', 'scui-card-name', TEXT.customGroups));
+			box.appendChild(head);
+
+			// 已有组：点名字改，点垃圾桶删
+			if (custom.defs.length) {
+				var defined = el('div', 'scui-picklist');
+				custom.defs.forEach(function(def) {
+					var chip = el('span', 'scui-node');
+					chip.title = TEXT.customGroups;
+					chip.appendChild(el('span', 'scui-node-name', def.name));
+					chip.appendChild(el('span', 'scui-node-ms', tpl(TEXT.pickedCount, def.count || 0)));
+					chip.onclick = function() { openEditor(def); };
+
+					var del = el('span', 'scui-node-del');
+					del.title = TEXT.deleteGroup;
+					del.appendChild(icon('trash'));
+					del.onclick = function(e) {
+						if (e.stopPropagation) { e.stopPropagation(); }
+						saveCustom({ name: def.name, remove: true });
+					};
+					chip.appendChild(del);
+					defined.appendChild(chip);
+				});
+				box.appendChild(defined);
+			}
+
+			var row = el('div', 'scui-editor-row');
+			var nameInput = el('input');
+			nameInput.type = 'text';
+			nameInput.value = custom.name;
+			nameInput.placeholder = TEXT.groupNamePh;
+			nameInput.oninput = function() { custom.name = nameInput.value; };
+			row.appendChild(nameInput);
+
+			var typeSel = el('select');
+			[['select', TEXT.typeSelect], ['url-test', TEXT.typeUrlTest]].forEach(function(pair) {
+				var opt = el('option', null, pair[1]);
+				opt.value = pair[0];
+				if (custom.type === pair[0]) { opt.selected = true; }
+				typeSel.appendChild(opt);
+			});
+			typeSel.onchange = function() { custom.type = typeSel.value; };
+			row.appendChild(typeSel);
+			box.appendChild(row);
+
+			var kw = el('textarea', 'scui-kw');
+			kw.rows = 2;
+			kw.value = custom.keywords.join(', ');
+			kw.placeholder = TEXT.kwPh;
+			kw.oninput = function() {
+				custom.keywords = String(kw.value).split(',').map(function(s) {
+					return s.trim();
+				}).filter(function(s) { return s !== ''; });
+				paintPickList();
+			};
+			box.appendChild(kw);
+			box.appendChild(el('div', 'scui-hint', TEXT.kwHint));
+
+			var search = el('input');
+			search.type = 'text';
+			search.value = custom.filter;
+			search.placeholder = TEXT.filterNodesPh;
+			search.oninput = function() { custom.filter = search.value; paintPickList(); };
+			box.appendChild(search);
+
+			var pickList = el('div', 'scui-picklist scui-picklist-tall');
+			box.appendChild(pickList);
+
+			function paintPickList() {
+				pickList.innerHTML = '';
+				var needle = custom.filter.trim().toLowerCase();
+				custom.nodes.forEach(function(node) {
+					if (needle && node.toLowerCase().indexOf(needle) < 0) {
+						return;
+					}
+					var picked = custom.keywords.some(function(k) {
+						return k.toLowerCase() === node.toLowerCase();
+					});
+					var chip = el('span', 'scui-node' + (picked ? ' is-current' : ''));
+					if (picked) { chip.appendChild(icon('check')); }
+					chip.appendChild(el('span', 'scui-node-name', translateName(node)));
+					chip.onclick = function() {
+						if (picked) {
+							custom.keywords = custom.keywords.filter(function(k) {
+								return k.toLowerCase() !== node.toLowerCase();
+							});
+						} else {
+							custom.keywords.push(node);
+						}
+						kw.value = custom.keywords.join(', ');
+						paintPickList();
+					};
+					pickList.appendChild(chip);
+				});
+			}
+			paintPickList();
+
+			var actions = el('div', 'scui-editor-actions');
+			var saveBtn = el('button', 'scui-btn scui-btn-primary');
+			saveBtn.type = 'button';
+			saveBtn.appendChild(el('span', null, TEXT.save));
+			saveBtn.onclick = function() {
+				saveCustom({ name: custom.name, type: custom.type, keywords: custom.keywords });
+			};
+			actions.appendChild(saveBtn);
+
+			var cancelBtn = el('button', 'scui-btn');
+			cancelBtn.type = 'button';
+			cancelBtn.appendChild(el('span', null, TEXT.cancel));
+			cancelBtn.onclick = function() { custom.open = false; paint(); };
+			actions.appendChild(cancelBtn);
+			box.appendChild(actions);
+
+			return box;
+		}
+
 		// ---- 绘制
 		function paint() {
 			if (!mount) {
@@ -1096,6 +1374,9 @@ window.ssrClashUI = (function() {
 			}
 
 			mount.appendChild(buildToolbar());
+			if (custom.open) {
+				mount.appendChild(buildEditor());
+			}
 
 			var needle = filterText.trim().toLowerCase();
 			var visible = needle ? groups.filter(function(group) {
@@ -1174,11 +1455,12 @@ window.ssrClashUI = (function() {
 					mount.appendChild(buildEmpty(TEXT.notActive));
 					return;
 				}
-				testUrl = result.test_url || '';
-				testInterval = result.test_interval || '';
-				groups = result.groups || [];
-				ok();
-				paint();
+			testUrl = result.test_url || '';
+			testInterval = result.test_interval || '';
+			groups = result.groups || [];
+			ok();
+			paint();
+			loadCustom();
 			});
 		}
 
@@ -1191,10 +1473,11 @@ window.ssrClashUI = (function() {
 			busy: busy,
 			warn: warn,
 			err: err,
-			reset: function() {
-				groups = [];
-				filterText = '';
-				expandedGroups = {};
+		reset: function() {
+			groups = [];
+			filterText = '';
+			expandedGroups = {};
+			custom.open = false;
 				if (mount) { mount.innerHTML = ''; }
 			}
 		};

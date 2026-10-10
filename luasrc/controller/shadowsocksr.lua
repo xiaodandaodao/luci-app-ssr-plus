@@ -17,6 +17,32 @@ local COMPONENT_HELPER = "/usr/share/shadowsocksr/update_components.sh"
 local SERVER_DETECT_CACHE = "/tmp/ssrplus_server_detect.json"
 local SERVER_DETECT_LOCK = "/tmp/ssrplus_server_detect.lock"
 local CLASH_RULES_DIR = "/etc/ssrplus/clash"
+local CLASH_WORKDIR_ROOT = "/var/etc/ssrplus/clash-"
+local CUSTOM_GROUPS_FILE = "/etc/ssrplus/custom_groups.conf"
+local CLASH_YAML_HELPER = "/usr/share/shadowsocksr/clash_yaml.lua"
+
+-- 不是真节点，面板里不该当成可选出口
+local NON_NODE_NAMES = {
+	DIRECT = true, REJECT = true, ["REJECT-DROP"] = true, PASS = true,
+	["PASS-RULE"] = true, GLOBAL = true, COMPATIBLE = true
+}
+
+-- 订阅里的「伪节点」：显示剩余流量 / 到期时间，本地秒回，混进去必被选中
+local INFO_NODE_PATTERNS = {
+	"^traffic[%s:：]", "^expire[%s:：]", "^剩余流量", "^到期",
+	"^套餐", "^官网", "^公告", "^tg群"
+}
+
+local function is_info_node(name)
+	local lower = tostring(name):lower()
+	for _, pattern in ipairs(INFO_NODE_PATTERNS) do
+		if lower:find(pattern) then
+			return true
+		end
+	end
+	return false
+end
+
 local SUPPORTED_COMPONENTS = {
 	mainprogram = true,
 	xray = true,
@@ -591,8 +617,10 @@ local function build_clash_group_view(proxies)
 	end
 	for name, proxy in pairs(proxies) do
 		if type(proxy) == "table" and type(proxy.all) == "table" and #proxy.all > 0 then
-			local members = {}
-			for _, member in ipairs(proxy.all) do
+		local members = {}
+		for _, member in ipairs(proxy.all) do
+			-- 订阅里的「剩余流量 / 到期时间」这类伪节点不是出口，别显示成可选节点
+			if not is_info_node(member) then
 				local mp = proxies[member]
 				local leaf = resolve_clash_leaf(proxies, member, 0)
 				members[#members + 1] = {
@@ -606,7 +634,8 @@ local function build_clash_group_view(proxies)
 					auto = AUTO_SELECT_TYPES[tostring((type(mp) == "table" and mp.type) or "")] == true
 				}
 			end
-			table.sort(members, function(a, b) return tostring(a.name) < tostring(b.name) end)
+		end
+		table.sort(members, function(a, b) return tostring(a.name) < tostring(b.name) end)
 
 			local now = proxy.now or ""
 			local leaf = resolve_clash_leaf(proxies, now ~= "" and now or name, 0)
@@ -807,6 +836,8 @@ function index()
 	entry({"admin", "services", "shadowsocksr", "clash_switch"}, call("clash_switch")).leaf = true
 	entry({"admin", "services", "shadowsocksr", "clash_refresh"}, call("clash_refresh")).leaf = true
 	entry({"admin", "services", "shadowsocksr", "clash_reset_defaults"}, call("clash_reset_defaults")).leaf = true
+	entry({"admin", "services", "shadowsocksr", "clash_custom_groups"}, call("clash_custom_groups")).leaf = true
+	entry({"admin", "services", "shadowsocksr", "clash_custom_group_save"}, call("clash_custom_group_save")).leaf = true
 	entry({"admin", "services", "shadowsocksr", "clash_client_policies"}, call("clash_client_policies")).leaf = true
 	entry({"admin", "services", "shadowsocksr", "clash_client_rule_save"}, call("clash_client_rule_save")).leaf = true
 	entry({"admin", "services", "shadowsocksr", "clash_client_rule_clear"}, call("clash_client_rule_clear")).leaf = true
@@ -1378,6 +1409,183 @@ function clash_reset_defaults()
 	luci.http.write_json({
 		success = cleared,
 		reapplied = reapplied
+	})
+end
+
+-- ---------------------------------------------------------------------------
+-- 自定义节点组
+--
+-- 定义存在 /etc/ssrplus/custom_groups.conf，一行一组：
+--   <组名> \t <select|url-test> \t <关键字1,关键字2,...>
+-- 节点匹配用「关键字包含」而不是全等：订阅一更新节点编号就变，写死全等下次就空了。
+-- ---------------------------------------------------------------------------
+
+local function read_custom_group_defs()
+	local defs = {}
+	local data = nixio.fs.readfile(CUSTOM_GROUPS_FILE)
+	if not data or data == "" then
+		return defs
+	end
+	for line in tostring(data):gmatch("[^\r\n]+") do
+		local name, gtype, keywords = line:match("^([^\t]+)\t?([^\t]*)\t?([^\t]*)")
+		if name and name ~= "" then
+			local words = {}
+			for word in tostring(keywords or ""):gmatch("[^,]+") do
+				words[#words + 1] = word
+			end
+			defs[#defs + 1] = {
+				name = name,
+				type = (gtype == "url-test" or gtype == "fallback") and gtype or "select",
+				keywords = words
+			}
+		end
+	end
+	return defs
+end
+
+local function write_custom_group_defs(defs)
+	local lines = {}
+	for _, def in ipairs(defs) do
+		lines[#lines + 1] = table.concat({
+			def.name, def.type, table.concat(def.keywords or {}, ",")
+		}, "\t")
+	end
+	nixio.fs.writefile(CUSTOM_GROUPS_FILE, #lines > 0 and (table.concat(lines, "\n") .. "\n") or "")
+end
+
+-- 列出可选的真实节点 + 已定义的自定义组（附带实际命中的节点）
+function clash_custom_groups()
+	local sid = luci.http.formvalue("sid")
+	local active_sid = resolve_active_clash_sid(sid)
+	local nodes = {}
+	local defs = read_custom_group_defs()
+
+	if active_sid then
+		local proxies = clash_proxy_map(active_sid)
+		if proxies then
+			for name, proxy in pairs(proxies) do
+				if type(proxy) == "table"
+					and not (type(proxy.all) == "table" and #proxy.all > 0)
+					and not NON_NODE_NAMES[name]
+					and not is_info_node(name) then
+					nodes[#nodes + 1] = name
+				end
+			end
+			table.sort(nodes)
+		end
+	end
+
+	for _, def in ipairs(defs) do
+		local matched = {}
+		for _, node in ipairs(nodes) do
+			local lower = node:lower()
+			for _, key in ipairs(def.keywords) do
+				if lower:find(tostring(key):lower(), 1, true) then
+					matched[#matched + 1] = node
+					break
+				end
+			end
+		end
+		def.matched = matched
+		def.count = #matched
+	end
+
+	luci.http.prepare_content("application/json")
+	luci.http.write_json({
+		active = active_sid ~= nil,
+		sid = active_sid,
+		nodes = nodes,
+		defs = defs
+	})
+end
+
+function clash_custom_group_save()
+	local sid = luci.http.formvalue("sid")
+	local active_sid = resolve_active_clash_sid(sid)
+	if not active_sid then
+		luci.http.status(409, "Conflict")
+		luci.http.prepare_content("application/json")
+		luci.http.write_json({ success = false, message = "inactive" })
+		return
+	end
+
+	local name = luci.util.trim(tostring(luci.http.formvalue("name") or ""))
+	local remove = luci.http.formvalue("remove") == "1"
+	if name == "" then
+		luci.http.status(400, "Bad Request")
+		luci.http.prepare_content("application/json")
+		luci.http.write_json({ success = false, message = "missing name" })
+		return
+	end
+
+	local defs = read_custom_group_defs()
+	if remove then
+		local kept = {}
+		for _, def in ipairs(defs) do
+			if def.name ~= name then
+				kept[#kept + 1] = def
+			end
+		end
+		defs = kept
+	else
+		local keywords = {}
+		for word in tostring(luci.http.formvalue("keywords") or ""):gmatch("[^,]+") do
+			keywords[#keywords + 1] = luci.util.trim(word)
+		end
+		if #keywords == 0 then
+			luci.http.status(400, "Bad Request")
+			luci.http.prepare_content("application/json")
+			luci.http.write_json({ success = false, message = "missing keywords" })
+			return
+		end
+		local gtype = luci.http.formvalue("type") == "url-test" and "url-test" or "select"
+		local replaced = false
+		for _, def in ipairs(defs) do
+			if def.name == name then
+				def.type = gtype
+				def.keywords = keywords
+				replaced = true
+				break
+			end
+		end
+		if not replaced then
+			defs[#defs + 1] = { name = name, type = gtype, keywords = keywords }
+		end
+	end
+	write_custom_group_defs(defs)
+
+	-- 重新生成运行时配置，复用 init.d 的同两步（raw/overlay 已在原位）
+	local workdir = CLASH_WORKDIR_ROOT .. active_sid
+	local runtime = workdir .. "/config.yaml"
+	local helper = string.format("/usr/bin/lua %s", luci.util.shellquote(CLASH_YAML_HELPER))
+	local regen = luci.sys.call(string.format("%s merge %s %s %s >/dev/null 2>&1",
+		helper,
+		luci.util.shellquote(workdir .. "/raw.yaml"),
+		luci.util.shellquote(workdir .. "/overlay.yaml"),
+		luci.util.shellquote(runtime)))
+	if regen ~= 0 then
+		luci.http.prepare_content("application/json")
+		luci.http.write_json({ success = false, message = "regen_failed" })
+		return
+	end
+	luci.sys.call(string.format("%s append_client_policy_rules %s %s >/dev/null 2>&1",
+		helper, luci.util.shellquote(runtime), luci.util.shellquote(active_sid)))
+
+	-- 热重载：mihomo 原生接口，不重启进程、不重播连接
+	local body = string.format('{"path":"%s"}', runtime)
+	local ret = clash_api_request(active_sid, "PUT", "/configs?force=true", body, 20)
+	local ok = ret ~= nil and ret.code ~= nil and ret.code >= 200 and ret.code < 300
+	local restarted = false
+	if not ok then
+		luci.sys.call("/etc/init.d/shadowsocksr restart >/dev/null 2>&1 &")
+		restarted = true
+	end
+
+	luci.http.prepare_content("application/json")
+	luci.http.write_json({
+		success = ok,
+		restarted = restarted,
+		code = ret and ret.code or nil
 	})
 end
 

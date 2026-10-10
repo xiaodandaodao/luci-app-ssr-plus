@@ -473,6 +473,135 @@ local function inject_autoselect_groups(doc)
 	return #added, mapping
 end
 
+-- ---------------------------------------------------------------------------
+-- 自定义节点组
+--
+-- 机场给的分组是按地区/流媒体切好的，用户真正想用的组合（比如「只留这 5 个
+-- 最快的香港节点」）订阅里没有。这里让用户自己在面板上勾节点，存成一行文本，
+-- 每次生成运行时配置时额外插一个代理组进去。
+--
+-- 存节点名而不是节点本身：订阅一更新，节点参数全变，只有名字还算稳定。
+-- 而且匹配用「关键字包含」而不是全等——订阅里 `🇭🇰 Hong Kong | 07` 的编号每次
+-- 都可能变，写死全等的话下次更新就空了，写关键字 `hong kong` 就一直命中。
+-- ---------------------------------------------------------------------------
+
+local CUSTOM_GROUPS_FILE = "/etc/ssrplus/custom_groups.conf"
+
+local function split_tabs(line)
+	local fields = {}
+	for field in tostring(line):gmatch("[^\t]+") do
+		fields[#fields + 1] = field
+	end
+	return fields
+end
+
+-- 每行：<组名> \t <select|url-test> \t <关键字1,关键字2,...>
+local function read_custom_group_defs()
+	local data = nixio.fs.readfile(CUSTOM_GROUPS_FILE)
+	if not data or data == "" then
+		return {}
+	end
+	local defs = {}
+	for line in tostring(data):gmatch("[^\r\n]+") do
+		local fields = split_tabs(line)
+		local name = trim(fields[1] or "")
+		if name ~= "" then
+			local gtype = tostring(fields[2] or ""):lower()
+			-- 认得 url-test / fallback，其它一律当 select，写错了也不至于生成坏配置
+			if gtype ~= "url-test" and gtype ~= "fallback" then
+				gtype = "select"
+			end
+			local keywords = {}
+			for word in tostring(fields[3] or ""):gmatch("[^,]+") do
+				local key = trim(word)
+				if key ~= "" then
+					keywords[#keywords + 1] = key:lower()
+				end
+			end
+			if #keywords > 0 then
+				defs[#defs + 1] = { name = name, type = gtype, keywords = keywords }
+			end
+		end
+	end
+	return defs
+end
+
+-- 返回：注入个数、因没匹配到任何节点而跳过的组数
+local function inject_custom_groups(doc)
+	local defs = read_custom_group_defs()
+	if #defs == 0 then
+		return 0, 0
+	end
+
+	local proxy_types = collect_proxy_types(doc)
+	local candidates = {}
+	for _, proxy in ipairs(doc.proxies or {}) do
+		if type(proxy) == "table" then
+			local name = tostring(proxy.name or "")
+			if name ~= "" and selectable_member(name, proxy_types) then
+				candidates[#candidates + 1] = name
+			end
+		end
+	end
+	if #candidates == 0 then
+		return 0, #defs
+	end
+
+	local used = collect_used_names(doc)
+	local urltest = get_urltest_options()
+	-- 没开自动切换时用内置默认参数，保证 url-test 组照样能建起来
+	if not urltest then
+		urltest = { url = URLTEST_DEFAULT_URL, interval = 300, tolerance = 50 }
+	end
+
+	local added = {}
+	local empty = 0
+	for _, def in ipairs(defs) do
+		local members = {}
+		for _, name in ipairs(candidates) do
+			local lower = name:lower()
+			for _, key in ipairs(def.keywords) do
+				if lower:find(key, 1, true) then
+					members[#members + 1] = name
+					break
+				end
+			end
+		end
+		-- 空组会让 mihomo 直接拒绝整份配置，宁可跳过
+		if #members == 0 then
+			empty = empty + 1
+		else
+			local group = {
+				name = make_unique_name(def.name, used),
+				type = def.type,
+				proxies = members
+			}
+			if def.type ~= "select" then
+				group.url = urltest.url
+				group.interval = urltest.interval
+				group.tolerance = urltest.tolerance
+			end
+			added[#added + 1] = group
+		end
+	end
+
+	if #added == 0 then
+		return 0, empty
+	end
+
+	local groups = type(doc["proxy-groups"]) == "table" and doc["proxy-groups"] or {}
+	local result = {}
+	for _, group in ipairs(added) do
+		result[#result + 1] = group
+	end
+	for _, group in ipairs(groups) do
+		result[#result + 1] = group
+	end
+	doc["proxy-groups"] = result
+
+	return #added, empty
+end
+
 -- 把 group -> 影子组 的对应关系写成 TSV，供 init.d 在启动后调用 API 应用。
 -- 三列：<urlencoded 原组名> \t <urlencoded 影子组名> \t <影子组原名>
 local function write_autoselect_map(output_path, mapping)
@@ -566,6 +695,8 @@ local function merge(raw_path, overlay_path, output_path)
 	local filled_groups = fill_empty_proxy_groups(raw_doc)
 	local stripped_rules = strip_incompatible_script_rules(raw_doc)
 	local injected_groups, autoselect_mapping = inject_autoselect_groups(raw_doc)
+	-- 放在影子组之后：自定义组不该再被自动挂一层影子组
+	local custom_groups, custom_empty = inject_custom_groups(raw_doc)
 	local merged = deep_merge(raw_doc, overlay_doc)
 	local ok, rendered = pcall(lyaml.dump, { merged })
 	if not ok or not rendered then
@@ -576,8 +707,8 @@ local function merge(raw_path, overlay_path, output_path)
 	write_file(output_path, rendered)
 	local injected_applied = write_autoselect_map(output_path, autoselect_mapping)
 	io.stdout:write(string.format(
-		"filled_groups=%d stripped_script_rules=%d injected_autoselect=%d injected_applied=%d\n",
-		filled_groups, stripped_rules, injected_groups, injected_applied))
+		"filled_groups=%d stripped_script_rules=%d injected_autoselect=%d injected_applied=%d injected_custom=%d custom_empty=%d\n",
+		filled_groups, stripped_rules, injected_groups, injected_applied, custom_groups, custom_empty))
 	return true
 end
 

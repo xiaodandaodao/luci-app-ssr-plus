@@ -593,6 +593,7 @@ clash_cache() {
 	[ "$(uci_get_by_name "$sid" type)" = "clash" ] || return 1
 	mkdir -p "$TMP_PATH" "$CLASH_CONFIG_DIR"
 	download_clash_config "$sid"
+	clean_orphan_clash_cache
 }
 
 filter_clash_yaml_proxies() {
@@ -620,6 +621,47 @@ filter_clash_yaml_proxies() {
 	fi
 
 	rm -f "$names_file" "$removed_file"
+}
+
+_collect_clash_sid() {
+	local sid="$1"
+	[ "$(uci_get_by_name "$sid" type)" = "clash" ] && _orphan_keep_sids="$_orphan_keep_sids $sid"
+}
+
+# 订阅换过地址、节点删掉之后，旧缓存会一直留在 flash 上。
+# 旧版本还按订阅链接的 md5 命名，那些文件再也不会被读到，更是纯占位。
+clean_orphan_clash_cache() {
+	local file base sid keep
+	local removed=0
+
+	[ -d "$CLASH_CONFIG_DIR" ] || return 0
+
+	_orphan_keep_sids=""
+	config_load shadowsocksr
+	config_foreach _collect_clash_sid servers
+	# 拿不到节点列表就一个都不删——宁可留着垃圾，也不能把在用的订阅缓存清空
+	[ -n "$_orphan_keep_sids" ] || return 0
+
+	for file in "$CLASH_CONFIG_DIR"/*.yaml; do
+		[ -e "$file" ] || continue
+		base="${file##*/}"
+		base="${base%.yaml}"
+		keep=0
+		for sid in $_orphan_keep_sids; do
+			if [ "$base" = "$sid" ]; then
+				keep=1
+				break
+			fi
+		done
+		[ "$keep" = "1" ] && continue
+		rm -f "$file" "${file}.md5" "$CLASH_CONFIG_DIR/$base.cache.db"
+		removed=$((removed + 1))
+	done
+
+	if [ "$removed" -gt 0 ] 2>/dev/null; then
+		echolog "已清理 $removed 个失效的 Clash 订阅缓存文件。"
+	fi
+	return 0
 }
 
 prepare_clash_runtime_config() {
@@ -676,6 +718,7 @@ prepare_clash_runtime_config() {
 		bind-address: "$(ipv6_enabled && echo '*' || echo '0.0.0.0')"
 		ipv6: $(ipv6_enabled && echo true || echo false)
 		routing-mark: $CLASH_OUTBOUND_MARK
+		log-level: warning
 		profile:
 		  store-selected: true
 		tun:

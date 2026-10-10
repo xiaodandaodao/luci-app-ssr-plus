@@ -15,7 +15,7 @@
       "source": "luci-app-ssr-plus/luasrc/controller/shadowsocksr.lua",
       "new": false,
       "mode": "0644",
-      "sha256": "7da8998ec64d061fa50592cd462929e7ee885739d63e9ec8f6c8aa9b05057f3d"
+      "sha256": "0d11acf43707fd6625deabae443a8cef410bcd654bbed7935174d8ca39220df9"
     },
     {
       "target": "app",
@@ -39,7 +39,7 @@
       "source": "luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_groups_ui.htm",
       "new": true,
       "mode": "0644",
-      "sha256": "ab523932ccf4fa978e85e8d99d7fb7aa6766675e74ef91fcf37633c530d64e53"
+      "sha256": "240ac112131f7373b527871c095afd07eb9ccf3a6999e1c45a0361d6dd1c2beb"
     },
     {
       "target": "app",
@@ -47,7 +47,7 @@
       "source": "luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm",
       "new": false,
       "mode": "0644",
-      "sha256": "53b3cac4888ab16ec985c969ff4637b8e37fd409c7358c1c6268a52fe6b6dcb6"
+      "sha256": "fe9692f408a41eb279aae37cec8567cfdda74d4e855e71aebe8e242143889251"
     },
     {
       "target": "app",
@@ -55,7 +55,7 @@
       "source": "luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_panel.htm",
       "new": false,
       "mode": "0644",
-      "sha256": "c78a15f3629b6062c306b4eaf3feaee28c14343cabaddf02056104da786bc25d"
+      "sha256": "d339f1b01f27b8e367d3faf3da69878b7079d0fd11f541c575eb8249c7ba25e9"
     },
     {
       "target": "app",
@@ -79,7 +79,7 @@
       "source": "luci-app-ssr-plus/root/etc/init.d/shadowsocksr",
       "new": false,
       "mode": "0755",
-      "sha256": "04c8eca5eb77b630c2851391eca76419600b3d45cb3f55fb4b9f8fdeaac5cc59"
+      "sha256": "5f31ba4a58ceeb5c0ac35f6598f48f4b59dedfbc5e1da3fc369282fdbf27df68"
     },
     {
       "target": "app",
@@ -87,7 +87,7 @@
       "source": "luci-app-ssr-plus/root/usr/share/shadowsocksr/clash_yaml.lua",
       "new": false,
       "mode": "0644",
-      "sha256": "afacdedf606bb12a80f7f9a71c5dcff6d60d975e6ed3fbb4c79797efd7818d8a"
+      "sha256": "b2b099c57f587625215e1161397bd5a5669e3688978e1ae0da713d45530ad6f8"
     },
     {
       "target": "app",

@@ -152,6 +152,38 @@ LuCI 侧边栏的独立页面 —— 三处来回跳。现在合并成一个弹�
 > `/usr/share/v2ray/` 也不存在时由升级流程自动创建（1901 已修，本次复验通过）。
 
 > 上游 `po/zh-cn/` 目录（同内容、旧命名）未同步改动，属已知差异，不影响 lmo 生成（本仓库用 `po/zh_Hans/`）。
+
+### ⑨ 自定义节点组（轻量版）+ 面板小优化（未发版，随下次打包）
+
+机场给的分组是按地区/流媒体切好的，用户真正想用的组合（「只留这几个香港节点」）订阅里没有。
+§③ 曾经做过一版自定义分组（uci 存储 + 弹窗，约 500 行），因为臃肿被整体下线；这一版按
+「代码量尽量少」重做，**约 220 行**，存储从 uci 换成一行文本，去掉全部地区识别逻辑。
+
+三个设计取舍：
+
+* **存储用纯文本而非 uci**：`/etc/ssrplus/custom_groups.conf`，一行一组
+  `组名 \t select|url-test \t 关键字1,关键字2`。节点名带 emoji，塞进 uci 的 ini 语法容易踩坑；
+  纯文本读写各 5 行，也方便手工编辑。
+* **匹配用「关键字包含」而非节点名全等**：订阅一更新节点编号就变（`🇭🇰 Hong Kong | 07` → `| 08`），
+  写死全等下次更新就空了；关键字 `hong kong` 永远命中。精确节点名本身就是关键字的子集，
+  两种用法都不需要额外分支。
+* **保存后热重载，不重启**：mihomo 原生 `PUT /configs?force=true` + `{"path": ...}`，
+  实测 1 秒内生效、已有连接不中断（HTTP 204）。只有接口返回非 2xx 才兜底 `init.d restart`。
+
+| 文件 | 改动 |
+|---|---|
+| `root/usr/share/shadowsocksr/clash_yaml.lua` | 新增 `inject_custom_groups()`：读配置文件 → 按关键字从 `proxies` 里挑成员 → 生成 `select` / `url-test` 组插到 `proxy-groups` **最前**。放在 `inject_autoselect_groups()` 之后，自定义组不会再被挂一层影子组；成员复用既有的 `selectable_member()` 过滤伪节点；匹配不到节点的组直接跳过（空组会让 mihomo 拒绝整份配置）；组名冲突走 `make_unique_name()` |
+| `luasrc/controller/shadowsocksr.lua` | 新增 `clash_custom_groups`（返回可选真实节点 + 已定义组及其命中数）与 `clash_custom_group_save`（写文件 → `merge` 重新生成 → `append_client_policy_rules` → 热重载）。另加 `is_info_node()`：`build_clash_group_view()` 里过滤掉 `Expire:` / `Traffic:` 这类伪节点，面板不再把它们显示成可选出口 |
+| `luasrc/view/shadowsocksr/clash_groups_ui.htm` | 工具条「+ 自定义组」按钮 + 编辑区（组名、类型下拉、可手工改的关键字框、带筛选的节点勾选列表、已有组 chip 可改可删）。复用现有 `scui-*` 样式，节点 chip 选中态直接借 `is-current` |
+| `luasrc/view/shadowsocksr/clash_main_panel.htm`、`clash_panel.htm` | 传入 `customGroups` / `customSave` 两个接口地址 |
+| `root/etc/init.d/shadowsocksr` | overlay 加 `log-level: warning`（原来每条 TCP 连接写一行，实测日志 729KB 且持续增长）；新增 `clean_orphan_clash_cache()`，删掉不属于任何 clash 节点的旧订阅缓存（旧版按订阅链接 md5 命名的文件永远读不到，实测白占 1.2MB flash），`config_foreach` 拿不到节点列表时直接返回、一个都不删 |
+| `po/zh_Hans/ssr-plus.po`、`po/templates/ssr-plus.pot` | 新增 15 条文案 |
+
+> 热重载时 mihomo 日志会有一条 `Start TProxy server error: address already in use`。
+> 这是**既有配置**导致的：overlay 里 `redir-port` 与 `tproxy-port` 都设为同一个端口，
+> 后绑定的那个必然冲突。与本次改动无关，功能不受影响（实测重载后 12 条活跃连接正常、
+> 端口仍在监听），因此未在本批改动里调整端口配置。
+
 ## 3. 本仓库新增的非上游文件
 
 | 路径 | 说明 | 来源 / 许可 |
