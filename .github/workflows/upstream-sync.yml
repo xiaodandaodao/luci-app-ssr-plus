@@ -130,8 +130,11 @@ jobs:
           exit "$code"
 
       # -------------------------------------------------- 冲突路径：转人工
+      # 注意：门禁一律用 steps.sync.outcome，不要用 steps.sync.outputs.exitcode。
+      # 被跳过的步骤没有 outputs，直接比对 outputs 会出现"跳过了却判定为真"的意外，
+      # 导致上游没更新时也往下走，最后死在 git commit 的 "nothing to commit" 上。
       - name: 冲突转人工（开 PR）
-        if: steps.sync.outputs.exitcode == '2'
+        if: steps.sync.outcome == 'failure' && steps.sync.outputs.exitcode == '2'
         run: |
           NEW_TAG="$(jq -r .new_tag /tmp/check.json)"
           NEW_REL="$(jq -r .new_release /tmp/check.json)"
@@ -145,8 +148,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
           git add -A
-          git commit -m "chore: 同步上游 ${NEW_TAG}（存在冲突待裁决）"
-          git push -u origin "$BRANCH"
+          if git diff --cached --quiet; then
+            echo "::warning::没有可提交的冲突内容，跳过分支推送"
+          else
+            git commit -m "chore: 同步上游 ${NEW_TAG}（存在冲突待裁决）"
+            git push -u origin "$BRANCH"
+          fi
 
           {
             echo "自动同步上游 \`${BASE_TAG}\` → \`${NEW_TAG}\` 时，下面这些文件三方合并不干净："
@@ -187,7 +194,7 @@ jobs:
           fi
 
       - name: 冲突转人工（发 issue）
-        if: steps.sync.outputs.exitcode == '2'
+        if: steps.sync.outcome == 'failure' && steps.sync.outputs.exitcode == '2'
         run: |
           NEW_TAG="$(jq -r .new_tag /tmp/check.json)"
           PR_URL="$(gh pr view "sync/upstream-${NEW_TAG}" --json url --jq .url 2>/dev/null || echo '')"
@@ -213,34 +220,43 @@ jobs:
 
       # ------------------------------------------------ 干净路径：一路到底
       - name: 静态校验
-        if: steps.sync.outputs.exitcode == '0'
+        if: steps.sync.outcome == 'success'
         run: bash tools/verify.sh
 
       - name: 提交合并结果
-        if: steps.sync.outputs.exitcode == '0'
+        if: steps.sync.outcome == 'success'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git status --short
-          git commit -m "chore: 同步上游 $(jq -r .new_tag /tmp/check.json)"
+          # 没有实际改动时 git commit 会返回 1，别让"无变化"把 job 判死
+          if git diff --cached --quiet; then
+            echo "::notice::合并后无实际改动，跳过提交"
+          else
+            git commit -m "chore: 同步上游 $(jq -r .new_tag /tmp/check.json)"
+          fi
 
       - name: 推进版本号并重生成补丁与载荷
-        if: steps.sync.outputs.exitcode == '0'
+        if: steps.sync.outcome == 'success'
         run: |
           NEW_TAG="$(jq -r .new_tag /tmp/check.json)"
           NEW_REL="$(jq -r .new_release /tmp/check.json)"
           python3 tools/auto_sync.py finalize "$NEW_TAG" "$NEW_REL"
           git add -A
           git status --short
-          git commit -m "chore: 重生成补丁与注入载荷（196-r${NEW_REL}）"
+          if git diff --cached --quiet; then
+            echo "::notice::补丁与载荷已是最新，跳过提交"
+          else
+            git commit -m "chore: 重生成补丁与注入载荷（196-r${NEW_REL}）"
+          fi
 
       - name: 推送到 main
-        if: steps.sync.outputs.exitcode == '0'
+        if: steps.sync.outcome == 'success'
         run: git push origin main
 
       - name: 打 tag 并触发构建发布
-        if: steps.sync.outputs.exitcode == '0' && github.event.inputs.no_release != 'true'
+        if: steps.sync.outcome == 'success' && github.event.inputs.no_release != 'true'
         run: |
           TAG_NAME="$(jq -r .tag_name /tmp/check.json)"
           git tag "$TAG_NAME"
@@ -256,7 +272,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 清理旧 Release
-        if: steps.sync.outputs.exitcode == '0' && github.event.inputs.no_release != 'true'
+        if: steps.sync.outcome == 'success' && github.event.inputs.no_release != 'true'
         run: |
           keep="${{ github.event.inputs.keep_releases || '2' }}"
           if [ "$keep" -le 0 ] 2>/dev/null; then
