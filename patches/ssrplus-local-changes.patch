@@ -1,17 +1,17 @@
 diff --git a/Makefile b/Makefile
-index 425251a..1ead865 100644
+index af5a2ae..0c121d6 100644
 --- a/Makefile
 +++ b/Makefile
 @@ -4,7 +4,11 @@ LUCI_TITLE:=luci-app-ssr-plus
  LUCI_PKGARCH:=all
  PKG_NAME:=luci-app-ssr-plus
- PKG_VERSION:=196
--PKG_RELEASE:=19
+ PKG_VERSION:=198
+-PKG_RELEASE:=2
 +# PKG_RELEASE 编码规则：<上游 release><两位本方修订序>
-+#   上游 v196.19 的第 1 版 = 1901，……，第 6 版 = 1906；上游升到 r20 则重新从 2001 起。
++#   上游 v198.2 的第 1 版 = 2001；同一基线上的下一次修订 = 2002。
 +#   必须是纯数字且单调递增 —— apk 的 "-r" 后只接受整数（RE13 这类写法会被 mkpkg 拒绝），
 +#   数字编码同时保证 opkg/apk 都会把它判定为「比旧版新」的升级。
-+PKG_RELEASE:=1906
++PKG_RELEASE:=2001
  
  PKG_CONFIG_DEPENDS:= \
  	CONFIG_PACKAGE_$(PKG_NAME)_Iptables_Transparent_Proxy \
@@ -4687,7 +4687,7 @@ index a1d040d..774579f 100644
  						</div>
  						<div class="component-select-item">
 diff --git a/po/templates/ssr-plus.pot b/po/templates/ssr-plus.pot
-index baaf4cd..3cba305 100644
+index ce5cdf3..9625414 100644
 --- a/po/templates/ssr-plus.pot
 +++ b/po/templates/ssr-plus.pot
 @@ -8,6 +8,14 @@ msgid ""
@@ -4852,11 +4852,11 @@ index baaf4cd..3cba305 100644
  msgstr ""
  
  #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/component.htm:10
-@@ -3378,3 +3438,204 @@ msgstr ""
- 
+@@ -3379,6 +3439,207 @@ msgstr ""
  msgid "Minimum idle sessions"
  msgstr ""
-+
+ 
++<<<<<<< ours
 +msgid "Client Rules"
 +msgstr ""
 +
@@ -5056,9 +5056,18 @@ index baaf4cd..3cba305 100644
 +msgstr ""
 +
 +msgid "skipped"
-+msgstr ""
++=======
+ msgid "Naive HTTP/3 (QUIC)"
+ msgstr ""
+ 
+@@ -3392,4 +3653,5 @@ msgid "Naive ECH config list (base64)"
+ msgstr ""
+ 
+ msgid "Naive transport"
++>>>>>>> theirs
+ msgstr ""
 diff --git a/po/zh_Hans/ssr-plus.po b/po/zh_Hans/ssr-plus.po
-index 831ac7f..00dcd36 100644
+index 903ae55..390e2c6 100644
 --- a/po/zh_Hans/ssr-plus.po
 +++ b/po/zh_Hans/ssr-plus.po
 @@ -10,6 +10,14 @@ msgstr ""
@@ -5447,11 +5456,11 @@ index 831ac7f..00dcd36 100644
  msgid "Idle session check interval (seconds)"
  msgstr "空闲会话检查间隔（秒）"
  
-@@ -3885,3 +4175,37 @@ msgstr "国内 IPv6 地址库更新地址"
- 
+@@ -3886,6 +4176,41 @@ msgstr "国内 IPv6 地址库更新地址"
  msgid "China IPv6 Data"
  msgstr "国内 IPv6 地址库"
-+
+ 
++<<<<<<< ours
 +#: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm
 +msgid "Custom Domain Rules"
 +msgstr "自定义分流规则"
@@ -5485,8 +5494,17 @@ index 831ac7f..00dcd36 100644
 +
 +msgid "skipped"
 +msgstr "跳过"
++=======
+ msgid "Naive HTTP/3 (QUIC)"
+ msgstr "Naive HTTP/3（QUIC）"
+ 
+@@ -3900,3 +4225,4 @@ msgstr "Naive ECH 配置列表（Base64）"
+ 
+ msgid "Naive transport"
+ msgstr "Naive 传输协议"
++>>>>>>> theirs
 diff --git a/root/etc/init.d/shadowsocksr b/root/etc/init.d/shadowsocksr
-index 8ee8755..7edd7e7 100755
+index bc43b4c..ee36d0c 100755
 --- a/root/etc/init.d/shadowsocksr
 +++ b/root/etc/init.d/shadowsocksr
 @@ -593,6 +593,7 @@ clash_cache() {
@@ -5687,7 +5705,7 @@ index 8ee8755..7edd7e7 100755
  resolve_global_clash_socks_port() {
  	local socks_enabled
  	local socks_server
-@@ -1011,9 +1154,12 @@ start_v2ray_with_mihomo() {
+@@ -1015,9 +1158,12 @@ start_v2ray_with_mihomo() {
  	workdir="$(get_v2ray_mihomo_workdir "$instance_key")"
  	protocol_name="$(uci_get_by_name "$sid" v2ray_protocol)"
  	[ -n "$protocol_name" ] || protocol_name="$(uci_get_by_name "$sid" type)"
@@ -5703,7 +5721,7 @@ index 8ee8755..7edd7e7 100755
  }
  
  start_socks5_udp_with_ipt2socks() {
-@@ -1103,7 +1249,46 @@ ln_start_bin() {
+@@ -1107,7 +1253,46 @@ ln_start_bin() {
  		_exit 2
  	}
  	ulimit -n 1000000
@@ -5751,7 +5769,7 @@ index 8ee8755..7edd7e7 100755
  }
  
  check_run_environment() {
-@@ -2487,8 +2672,13 @@ Start_Run() {
+@@ -2496,8 +2681,13 @@ Start_Run() {
  			return 1
  		}
  		clash_workdir="$(get_clash_workdir "$GLOBAL_SERVER")"
@@ -5768,7 +5786,7 @@ index 8ee8755..7edd7e7 100755
  	socks5)
  		if start_socks5_redir_with_ipt2socks "$GLOBAL_SERVER" "$tcp_port" "$threads"; then
 diff --git a/root/usr/share/shadowsocksr/clash_yaml.lua b/root/usr/share/shadowsocksr/clash_yaml.lua
-index beda6d7..7c6dba7 100644
+index 2099ede..4300863 100644
 --- a/root/usr/share/shadowsocksr/clash_yaml.lua
 +++ b/root/usr/share/shadowsocksr/clash_yaml.lua
 @@ -253,6 +253,526 @@ local function fill_empty_proxy_groups(doc)

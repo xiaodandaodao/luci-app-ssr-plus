@@ -1,13 +1,13 @@
 {
   "format": 1,
-  "generated_from_version": "196-r1906",
-  "generated_from_commit": "f3aa679",
+  "generated_from_version": "198-r2001",
+  "generated_from_commit": "efe8feb",
   "patch": "ssrplus-local-changes.patch",
   "packages": {
     "app": "luci-app-ssr-plus",
     "i18n": "luci-i18n-ssr-plus-zh-cn"
   },
-  "mtime": 1791643269,
+  "mtime": 1793621936,
   "files": [
     {
       "target": "app",
@@ -71,7 +71,7 @@
       "source": "luci-app-ssr-plus/po/zh_Hans/ssr-plus.po",
       "new": false,
       "mode": "0644",
-      "sha256": "fb1a6913bfcdeef37318c0705273f543a3e51fed0c900d1a41e24b8d9a76f0f8"
+      "sha256": "ae1bdd7a07af13a1839ab70f6f32211e336b057a34fca7dd3d313d63f5ed88d0"
     },
     {
       "target": "app",
@@ -79,7 +79,7 @@
       "source": "luci-app-ssr-plus/root/etc/init.d/shadowsocksr",
       "new": false,
       "mode": "0755",
-      "sha256": "2a695ee4314acf0a16f72f024f350ba6cbca31bd151c2623409cb9954802f4eb"
+      "sha256": "6b8d613bd5a7af9c16eea5d700e72c5ab5635d5fade6cf485e459afaa6a03ff5"
     },
     {
       "target": "app",
@@ -87,7 +87,7 @@
       "source": "luci-app-ssr-plus/root/usr/share/shadowsocksr/clash_yaml.lua",
       "new": false,
       "mode": "0644",
-      "sha256": "1f1776da37e7dcca734bc03000eaf8f9ac4f7a2c000e3ba35b7a57c0fe68c338"
+      "sha256": "bc9fbddf6a6cf09904fb41e042b3d88282433999fd87017afd2080ce87c1a21b"
     },
     {
       "target": "app",
