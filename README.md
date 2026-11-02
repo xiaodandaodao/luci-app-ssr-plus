@@ -1,12 +1,12 @@
 # luci-app-ssr-plus（衍生构建仓库）
 
-> 基于上游 [`fw876/helloworld`](https://github.com/fw876/helloworld) tag **v196.19** 的 `luci-app-ssr-plus`，
+> 基于上游 [`fw876/helloworld`](https://github.com/fw876/helloworld) tag **v198.2** 的 `luci-app-ssr-plus`，
 > 加上一批 Mihomo 策略组增强，并配了一套**自持的本地/CI 打包工具链**：写完代码推到 GitHub，
 > Actions 直接编出 `.ipk` / `.apk` 交付，不需要 OpenWrt SDK，也不用交叉编译。
 >
 > 来源与改动逐条列在 [ATTRIBUTION.md](./ATTRIBUTION.md)，许可证沿用上游 [GPL-3.0](./LICENSE)。
 
-## 功能（相对上游 v196.19 的增量）
+## 功能（相对上游 v198.2 的增量）
 
 - **自动切换（核心）**：订阅里的策略组几乎全是 `select` 手动选择器 —— 选中的节点断了也不会
   自己换。开启后为每个选择器生成一个成员相同的 `url-test` 自动组，由 Mihomo 持续挑选最快的
@@ -20,8 +20,7 @@
 - **排障增强**：Mihomo 的启动输出不再一律丢进 `/dev/null`。启动后回看进程是否存活，
   立刻退出时把真实原因逐行写进日志并返回失败，替代原来无条件的 `Mihomo Started!`。
 
-上游 v196.14 → v196.19 的改动（AnyTLS 支持、IPv6 流量代理、nftables GFW 模式 DNS 转发修复、
-legacy SS 订阅解析修复）已全部并入。
+上游 v196.19 → v198.2 的改动（xray-core 升到 26.10.21、Mihomo 新增 Snell/TUIC/ShadowsocksR 支持、AnyTLS inbound、Cronet NaiveProxy、多语言翻译、多个 bug 修复）已全部并入。
 
 ## 安装
 
@@ -29,11 +28,11 @@ legacy SS 订阅解析修复）已全部并入。
 
 ```sh
 # opkg（传统 ipk 固件）
-opkg install luci-app-ssr-plus_196-r1906_all.ipk
-opkg install luci-i18n-ssr-plus-zh-cn_196-r1906_all.ipk
+opkg install luci-app-ssr-plus_198-r2001_all.ipk
+opkg install luci-i18n-ssr-plus-zh-cn_198-r2001_all.ipk
 
 # apk（apk-tools v3 固件，如 OpenWrt 24.10+ / ImmortalWrt）
-apk add --allow-untrusted ./luci-app-ssr-plus-196-r1906.apk
+apk add --allow-untrusted ./luci-app-ssr-plus-198-r2001.apk
 ```
 
 装完刷新 LuCI 页面即可。功能开关默认是关的，在「服务 → ShadowSocksR Plus+ → 服务器」里打开。
@@ -114,13 +113,8 @@ bash tools/sync-upstream.sh v196.20      # 同步到上游某个 tag
 
 | 情况 | 值 |
 |---|---|
-| 上游 `v196.19` 的第 1 版 | `1901` |
-| 同一上游基线上的第 2 次修订（打包权限位修复） | `1902` |
-| 同一上游基线上的第 3 次修订（主程序在线升级指向本仓库） | `1903` |
-| 同一上游基线上的第 4 次修订（自定义节点组 + 面板优化） | `1904` |
-| 同一上游基线上的第 5 次修订（自定义分流规则 + 域名嗅探修复） | `1905` |
-| 同一上游基线上的第 6 次修订（当前，补齐 pikpak.site 分流规则 + 自定义分流规则页签深色可读性） | `1906` |
-| 上游升到 `v196.20` 后的第 1 版 | `2001` |
+| 上游 `v198.2` 的第 1 版（当前，同步上游 v197→v198.2：xray-core 26.10.21、Mihomo Snell/TUIC/SR 支持、AnyTLS inbound、多语言翻译等） | `2001` |
+| 同一上游基线上的第 2 次修订 | `2002` |
 
 之所以必须是**纯数字**：apk 的版本号是 `<PKG_VERSION>-r<PKG_RELEASE>`，`-r` 后面只接受整数。
 `RE13` / `196R-r13` / `196-r13.1` 这类写法会被 `apk mkpkg` 直接拒绝（实测 `package version is invalid`），

@@ -3,12 +3,12 @@ include $(TOPDIR)/rules.mk
 LUCI_TITLE:=luci-app-ssr-plus
 LUCI_PKGARCH:=all
 PKG_NAME:=luci-app-ssr-plus
-PKG_VERSION:=196
+PKG_VERSION:=198
 # PKG_RELEASE 编码规则：<上游 release><两位本方修订序>
-#   上游 v196.19 的第 1 版 = 1901，……，第 6 版 = 1906；上游升到 r20 则重新从 2001 起。
+#   上游 v198.2 的第 1 版 = 2001；同一基线上的下一次修订 = 2002。
 #   必须是纯数字且单调递增 —— apk 的 "-r" 后只接受整数（RE13 这类写法会被 mkpkg 拒绝），
 #   数字编码同时保证 opkg/apk 都会把它判定为「比旧版新」的升级。
-PKG_RELEASE:=1906
+PKG_RELEASE:=2001
 
 PKG_CONFIG_DEPENDS:= \
 	CONFIG_PACKAGE_$(PKG_NAME)_Iptables_Transparent_Proxy \
@@ -35,7 +35,7 @@ LUCI_TITLE:=SS/SSR/V2Ray/Trojan/NaiveProxy/Tuic/ShadowTLS/Hysteria/AnyTLS/Socks5
 LUCI_PKGARCH:=all
 LUCI_DEPENDS:= \
 	+libuci-lua +lua +luci-compat +dns2tcp +dnsmasq-full \
-	+jq +ip-full +lua-neturl +libuci-lua +microsocks +ipt2socks +lyaml \
+	+ip-full +lua-neturl +libuci-lua +microsocks +ipt2socks +lyaml \
 	+resolveip +curl +nping \
 	+PACKAGE_$(PKG_NAME)_INCLUDE_ChinaDNS_NG:chinadns-ng \
 	+PACKAGE_$(PKG_NAME)_INCLUDE_MosDNS:mosdns \
@@ -118,7 +118,7 @@ endchoice
 
 config PACKAGE_$(PKG_NAME)_INCLUDE_ChinaDNS_NG
 	bool "Include ChinaDNS-NG"
-	default y if aarch64||arm||i386||x86_64
+	default n
 
 config PACKAGE_$(PKG_NAME)_INCLUDE_MosDNS
 	bool "Include MosDNS"
@@ -133,8 +133,7 @@ config PACKAGE_$(PKG_NAME)_INCLUDE_Mihomo
 	bool "Include Mihomo (Clash Support)"
 	select PACKAGE_mihomo
 	select PACKAGE_v2ray-geoip
-	depends on aarch64||arm||i386||loongarch64||riscv64||x86_64
-	default y if aarch64||arm||i386||loongarch64||riscv64||x86_64
+	default y if i386||loongarch64||riscv64||x86_64
 
 config PACKAGE_$(PKG_NAME)_INCLUDE_GeoData
 	bool "Include GeoData (GeoIP and GeoSite)"
@@ -169,7 +168,7 @@ config PACKAGE_$(PKG_NAME)_INCLUDE_Shadowsocks_V2ray_Plugin
 
 config PACKAGE_$(PKG_NAME)_INCLUDE_ShadowsocksR_Libev_Client
 	bool "Include ShadowsocksR Libev Client"
-	default y
+	default n
 
 config PACKAGE_$(PKG_NAME)_INCLUDE_ShadowsocksR_Libev_Server
 	bool "Include ShadowsocksR Libev Server"

@@ -1,0 +1,361 @@
+diff --git a/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua b/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua
+index e7b13fa..026deea 100644
+--- a/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua
++++ b/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua
+@@ -587,6 +587,35 @@ if has_mihomo then
+ 	o:value("https://gist.githubusercontent.com/vernesong/4c27ed54ab2a5fedd9c4011389ac11ed/raw/lhie1_clash.ini", "lhie1")
+ 	o.rmempty = true
+ 	o:depends("sub_convert", "1")
++
++	o = s:option(Flag, "mihomo_urltest", string.format("<b><span style='color:red;'>%s</span></b>", translate("Mihomo URL-Test Auto Select")))
++	o.default = "0"
++	o.rmempty = false
++	o.description = translate("Inject a url-test group into every proxy group of the Mihomo/Clash config, so Mihomo automatically uses the fastest node. The url-test group is inserted as the first entry of the original group and is selected by default; you can still switch back to a fixed node from the panel. If a node was already selected manually before, press Reset Default Proxies Rules once so Mihomo falls back to the first entry.")
++
++	o = s:option(Value, "mihomo_urltest_url", translate("URL-Test Address"))
++	o:value("https://cp.cloudflare.com/", "Cloudflare")
++	o:value("https://www.gstatic.com/generate_204", "Gstatic")
++	o:value("https://www.google.com/generate_204", "Google")
++	o:value("https://www.youtube.com/generate_204", "YouTube")
++	o:value("https://connect.rom.miui.com/generate_204", "MIUI (CN)")
++	o.rmempty = true
++	o.description = translate("Leave empty to reuse the URL Test Address above.")
++	o:depends("mihomo_urltest", "1")
++
++	o = s:option(Value, "mihomo_urltest_interval", translate("URL-Test Interval"))
++	o.default = "300"
++	o.datatype = "uinteger"
++	o.rmempty = true
++	o.description = translate("Seconds between two health checks (minimum 30).")
++	o:depends("mihomo_urltest", "1")
++
++	o = s:option(Value, "mihomo_urltest_tolerance", translate("URL-Test Tolerance"))
++	o.default = "50"
++	o.datatype = "uinteger"
++	o.rmempty = true
++	o.description = translate("Switch only when a node is faster by more than this value (milliseconds).")
++	o:depends("mihomo_urltest", "1")
+ end
+ 
+ s:append(cbi.Template("shadowsocksr/subscribe_schedule_compact"))
+diff --git a/luci-app-ssr-plus/po/zh_Hans/ssr-plus.po b/luci-app-ssr-plus/po/zh_Hans/ssr-plus.po
+index 8a04415..a8202bd 100644
+--- a/luci-app-ssr-plus/po/zh_Hans/ssr-plus.po
++++ b/luci-app-ssr-plus/po/zh_Hans/ssr-plus.po
+@@ -871,6 +871,48 @@ msgstr "启用 ML-DSA-65 (可选)"
+ msgid "Enable Mihomo core"
+ msgstr "启用 Mihomo 核心"
+ 
++#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:592
++msgid "Mihomo URL-Test Auto Select"
++msgstr "Mihomo 自动选择最快节点（URL-Test）"
++
++#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:594
++msgid ""
++"Inject a url-test group into every proxy group of the Mihomo/Clash config, "
++"so Mihomo automatically uses the fastest node. The url-test group is "
++"inserted as the first entry of the original group and is selected by "
++"default; you can still switch back to a fixed node from the panel. If a node "
++"was already selected manually before, press Reset Default Proxies Rules once "
++"so Mihomo falls back to the first entry."
++msgstr ""
++"为 Mihomo/Clash 配置里的每个代理组自动注入一个 url-test 测速组，让 Mihomo 自动使用"
++"响应最快的节点。测速组会被插到原组成员的第一位并默认选中，你仍可在面板里手动改回"
++"固定节点。若此前已手动选过节点，请点一次「重置默认代理规则」，Mihomo 才会回落到第"
++"一项。"
++
++#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:601
++msgid "URL-Test Address"
++msgstr "URL-Test 测速地址"
++
++#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:607
++msgid "Leave empty to reuse the URL Test Address above."
++msgstr "留空则复用上方的「URL 测试地址」。"
++
++#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:609
++msgid "URL-Test Interval"
++msgstr "URL-Test 测速间隔"
++
++#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:612
++msgid "Seconds between two health checks (minimum 30)."
++msgstr "两次测速之间的间隔秒数（最小 30）。"
++
++#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:616
++msgid "URL-Test Tolerance"
++msgstr "URL-Test 切换容差"
++
++#: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/servers.lua:619
++msgid "Switch only when a node is faster by more than this value (milliseconds)."
++msgstr "仅当某节点快出该值（毫秒）以上时才切换，避免频繁抖动。"
++
+ #: applications/luci-app-ssr-plus/luasrc/model/cbi/shadowsocksr/client-config.lua:1699
+ msgid ""
+ "Enable Multipath TCP, need to be enabled in both server and client "
+diff --git a/luci-app-ssr-plus/root/etc/init.d/shadowsocksr b/luci-app-ssr-plus/root/etc/init.d/shadowsocksr
+index b030126..53523e8 100755
+--- a/luci-app-ssr-plus/root/etc/init.d/shadowsocksr
++++ b/luci-app-ssr-plus/root/etc/init.d/shadowsocksr
+@@ -603,6 +603,8 @@ prepare_clash_runtime_config() {
+ 	local merge_stats
+ 	local filled_groups
+ 	local stripped_script_rules
++	local injected_urltest
++	local urltest_enabled
+ 	local clash_secret
+ 	local dns_ipv4_only
+ 	local dns_mode
+@@ -618,6 +620,8 @@ prepare_clash_runtime_config() {
+ 	merge_stats=""
+ 	filled_groups=0
+ 	stripped_script_rules=0
++	injected_urltest=0
++	urltest_enabled="$(uci_get_by_type server_subscribe mihomo_urltest 0)"
+ 	clash_secret="$(get_clash_api_secret "$sid")"
+ 	dns_ipv4_only="$(get_filter_aaaa)"
+ 	dns_mode="$(uci_get_by_type global pdnsd_enable 0)"
+@@ -676,12 +680,21 @@ prepare_clash_runtime_config() {
+ 	stripped_script_rules="$(printf '%s\n' "$merge_stats" | sed -n 's/.*stripped_script_rules=\([0-9][0-9]*\).*/\1/p' | tail -n1)"
+ 	[ -n "$filled_groups" ] || filled_groups=0
+ 	[ -n "$stripped_script_rules" ] || stripped_script_rules=0
++	injected_urltest="$(printf '%s\n' "$merge_stats" | sed -n 's/.*injected_urltest=\([0-9][0-9]*\).*/\1/p' | tail -n1)"
++	[ -n "$injected_urltest" ] || injected_urltest=0
+ 	if [ "$filled_groups" -gt 0 ] 2>/dev/null; then
+ 		echolog "Clash YAML 兼容修复：共为 $filled_groups 个空代理组回填 DIRECT。"
+ 	fi
+ 	if [ "$stripped_script_rules" -gt 0 ] 2>/dev/null; then
+ 		echolog "Clash YAML 兼容修复：共移除 $stripped_script_rules 条不兼容的 SCRIPT 规则。"
+ 	fi
++	if [ "$urltest_enabled" = "1" ]; then
++		if [ "$injected_urltest" -gt 0 ] 2>/dev/null; then
++			echolog "URL-Test 自动选择：已为 $injected_urltest 个代理组注入 url-test 自动选择器（测速地址: $(uci_get_by_type server_subscribe mihomo_urltest_url "$(uci_get_by_type server_subscribe url_test_url https://www.gstatic.com/generate_204)")）。"
++		else
++			echolog "URL-Test 自动选择已开启，但没有可注入的代理组（组已是 url-test/fallback、成员不足 2 个、或成员不是真实节点）。"
++		fi
++	fi
+ 
+ 	client_policy_stats="$(/usr/bin/lua "$CLASH_YAML_HELPER" append_client_policy_rules "$runtime_file" "$sid" 2>/dev/null)" || true
+ 	client_rules="$(printf '%s\n' "$client_policy_stats" | sed -n 's/.*client_rules=\([0-9][0-9]*\).*/\1/p' | tail -n1)"
+diff --git a/luci-app-ssr-plus/root/usr/share/shadowsocksr/clash_yaml.lua b/luci-app-ssr-plus/root/usr/share/shadowsocksr/clash_yaml.lua
+index 2a4d28a..b328728 100644
+--- a/luci-app-ssr-plus/root/usr/share/shadowsocksr/clash_yaml.lua
++++ b/luci-app-ssr-plus/root/usr/share/shadowsocksr/clash_yaml.lua
+@@ -253,6 +253,186 @@ local function fill_empty_proxy_groups(doc)
+ 	return changed
+ end
+ 
++-- ---------------------------------------------------------------------------
++-- Mihomo url-test 自动选择器
++--
++-- 订阅/上传的 Clash YAML 里，代理组通常是 type: select，选哪个节点全靠手点。
++-- 开启后，为每个「叶子组」（成员全是真实节点的 select 组）生成一个 url-test 孪生组，
++-- 并把它插到原组成员的第 1 位 —— 和主流订阅模板的做法一致：
++-- 默认选中第 1 项即「自动选最快」，用户仍可在面板里手动改回具体节点。
++-- ---------------------------------------------------------------------------
++
++local URLTEST_DEFAULT_URL = "https://www.gstatic.com/generate_204"
++
++local function uci_subscribe_option(option, default)
++	local value = uci:get_first("shadowsocksr", "server_subscribe", option)
++	if value == nil or value == "" then
++		return default
++	end
++	return value
++end
++
++local function get_urltest_options()
++	if tostring(uci_subscribe_option("mihomo_urltest", "0")) ~= "1" then
++		return nil
++	end
++
++	local url = tostring(uci_subscribe_option("mihomo_urltest_url", ""))
++	if url == "" then
++		url = tostring(uci_subscribe_option("url_test_url", ""))
++	end
++	if url == "" then
++		url = URLTEST_DEFAULT_URL
++	end
++
++	local interval = tonumber(uci_subscribe_option("mihomo_urltest_interval", "300")) or 300
++	if interval < 30 then
++		interval = 30
++	end
++
++	local tolerance = tonumber(uci_subscribe_option("mihomo_urltest_tolerance", "50")) or 50
++	if tolerance < 0 then
++		tolerance = 0
++	end
++
++	return { url = url, interval = interval, tolerance = tolerance }
++end
++
++local function collect_proxy_names(doc)
++	local names = {}
++	for _, proxy in ipairs(doc.proxies or {}) do
++		if type(proxy) == "table" then
++			local name = tostring(proxy.name or "")
++			if name ~= "" then
++				names[name] = true
++			end
++		end
++	end
++	return names
++end
++
++local function collect_group_types(doc)
++	local types = {}
++	for _, group in ipairs(doc["proxy-groups"] or {}) do
++		if type(group) == "table" then
++			local name = tostring(group.name or "")
++			if name ~= "" then
++				types[name] = tostring(group.type or ""):lower()
++			end
++		end
++	end
++	return types
++end
++
++local function collect_used_names(doc)
++	local used = {}
++	for name in pairs(collect_proxy_names(doc)) do
++		used[name] = true
++	end
++	for name in pairs(collect_group_types(doc)) do
++		used[name] = true
++	end
++	return used
++end
++
++local function make_auto_group_name(base, used)
++	local name = base .. " 自动选择"
++	if not used[name] then
++		used[name] = true
++		return name
++	end
++	local index = 2
++	while used[base .. " 自动选择 " .. index] do
++		index = index + 1
++	end
++	name = base .. " 自动选择 " .. index
++	used[name] = true
++	return name
++end
++
++-- 只有「叶子组」才注入：成员必须全是真实节点，且组内尚未出现 url-test/fallback 成员
++-- （后者保证重复执行不会叠加，同时也尊重订阅模板自带的自动选择组）。
++local function urltest_candidate(group, proxy_names, group_types)
++	if tostring(group.type or ""):lower() ~= "select" then
++		return nil
++	end
++	if has_nonempty_sequence(group.use) then
++		return nil
++	end
++
++	local members = group.proxies
++	if type(members) ~= "table" or #members < 2 then
++		return nil
++	end
++
++	for _, member in ipairs(members) do
++		local name = tostring(member or "")
++		local gtype = group_types[name]
++		if gtype == "url-test" or gtype == "fallback" or gtype == "load-balance" then
++			return nil
++		end
++		if not proxy_names[name] then
++			return nil
++		end
++	end
++
++	return members
++end
++
++local function inject_urltest_groups(doc)
++	local options = get_urltest_options()
++	if not options then
++		return 0
++	end
++
++	local groups = doc["proxy-groups"]
++	if type(groups) ~= "table" or #groups == 0 then
++		return 0
++	end
++
++	local proxy_names = collect_proxy_names(doc)
++	local group_types = collect_group_types(doc)
++	local used = collect_used_names(doc)
++
++	local result = {}
++	local added = 0
++
++	for _, group in ipairs(groups) do
++		if type(group) ~= "table" then
++			result[#result + 1] = group
++		else
++			local members = urltest_candidate(group, proxy_names, group_types)
++			if members then
++				local name = make_auto_group_name(tostring(group.name or "Proxy"), used)
++				-- 拷贝一份，避免和原组共享同一张表导致 lyaml 输出 YAML 锚点/别名
++				local copied = {}
++				for index, member in ipairs(members) do
++					copied[index] = member
++				end
++
++				result[#result + 1] = {
++					name = name,
++					type = "url-test",
++					url = options.url,
++					interval = options.interval,
++					tolerance = options.tolerance,
++					proxies = copied
++				}
++				table.insert(group.proxies, 1, name)
++				group_types[name] = "url-test"
++				added = added + 1
++			end
++			result[#result + 1] = group
++		end
++	end
++
++	if added > 0 then
++		doc["proxy-groups"] = result
++	end
++
++	return added
++end
++
+ local function strip_incompatible_script_rules(doc)
+ 	local kept = {}
+ 	local removed = 0
+@@ -322,6 +502,7 @@ local function merge(raw_path, overlay_path, output_path)
+ 	strip_runtime_conflicts(raw_doc)
+ 	local filled_groups = fill_empty_proxy_groups(raw_doc)
+ 	local stripped_rules = strip_incompatible_script_rules(raw_doc)
++	local injected_urltest = inject_urltest_groups(raw_doc)
+ 	local merged = deep_merge(raw_doc, overlay_doc)
+ 	local ok, rendered = pcall(lyaml.dump, { merged })
+ 	if not ok or not rendered then
+@@ -330,7 +511,8 @@ local function merge(raw_path, overlay_path, output_path)
+ 	end
+ 
+ 	write_file(output_path, rendered)
+-	io.stdout:write(string.format("filled_groups=%d stripped_script_rules=%d\n", filled_groups, stripped_rules))
++	io.stdout:write(string.format("filled_groups=%d stripped_script_rules=%d injected_urltest=%d\n",
++		filled_groups, stripped_rules, injected_urltest))
+ 	return true
+ end
+ 
+diff --git a/luci-app-ssr-plus/root/usr/share/shadowsocksr/shadowsocksr.config b/luci-app-ssr-plus/root/usr/share/shadowsocksr/shadowsocksr.config
+index 819ce76..9b6a529 100644
+--- a/luci-app-ssr-plus/root/usr/share/shadowsocksr/shadowsocksr.config
++++ b/luci-app-ssr-plus/root/usr/share/shadowsocksr/shadowsocksr.config
+@@ -28,6 +28,10 @@ config server_subscribe
+ 	option auto_update_day_time '2'
+ 	option auto_update_min_time '0'
+ 	option url_test_url 'https://www.google.com/generate_204'
++	option mihomo_urltest '0'
++	option mihomo_urltest_url ''
++	option mihomo_urltest_interval '300'
++	option mihomo_urltest_tolerance '50'
+ 	option user_agent 'v2rayN/9.99'
+ 	option filter_words '过期/重置/套餐/剩余/网址/QQ群/官网/防失联/回国'
+ 

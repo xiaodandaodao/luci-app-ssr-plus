@@ -4176,6 +4176,7 @@ msgstr "国内 IPv6 地址库更新地址"
 msgid "China IPv6 Data"
 msgstr "国内 IPv6 地址库"
 
+<<<<<<< ours
 #: applications/luci-app-ssr-plus/luasrc/view/shadowsocksr/clash_main_panel.htm
 msgid "Custom Domain Rules"
 msgstr "自定义分流规则"
@@ -4209,3 +4210,19 @@ msgstr "生效"
 
 msgid "skipped"
 msgstr "跳过"
+=======
+msgid "Naive HTTP/3 (QUIC)"
+msgstr "Naive HTTP/3（QUIC）"
+
+msgid "Naive UDP over TCP (server support required)"
+msgstr "Naive UDP over TCP（需要服务端支持）"
+
+msgid "Naive trusted CA certificate file"
+msgstr "Naive 信任的 CA 证书文件"
+
+msgid "Naive ECH config list (base64)"
+msgstr "Naive ECH 配置列表（Base64）"
+
+msgid "Naive transport"
+msgstr "Naive 传输协议"
+>>>>>>> theirs
